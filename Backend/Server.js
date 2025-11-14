@@ -1,25 +1,152 @@
 import express from 'express';
 import mysql from 'mysql';
 import cors from 'cors';
-import bcrypt from 'bcrypt'; // hash password
-import multer from 'multer'; // handle multiple form content
-import cookieParser from 'cookie-parser'; // httpOnly cookie
+import bcrypt from 'bcrypt';//hash password
+import multer from 'multer'//handle multiple form content
+import cookieParser from 'cookie-parser';//httpOnly cookie
 import axios from 'axios';
 import querystring from 'querystring';
 import bodyParser from 'body-parser';
 import FormData from 'form-data';
+import rateLimit from 'express-rate-limit';
 
-// .env
+//.env
 import dotenv from 'dotenv';
 dotenv.config();
 
-// login 
+//login 
 import jwt from 'jsonwebtoken'; // import json web token
 
-// Rate limiting
-import rateLimit from 'express-rate-limit';
-
 const app = express();
+
+const isStrongPassword = (password) => {
+    if (typeof password !== 'string') {
+        return false;
+    }
+    const hasMinLength = password.length >= 8;
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasLowercase = /[a-z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const hasSymbol = /[^A-Za-z0-9]/.test(password);
+
+    return hasMinLength && hasUppercase && hasLowercase && hasNumber && hasSymbol;
+};
+
+//////////////////////////////////////////////////////////////////////////////// Enhanced Rate Limiting Configuration //////////////////////////////////////////////////
+
+// Enhanced Login rate limiter - prevents brute force attacks with precise timing
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 login attempts per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    return req.ip + (req.headers['user-agent'] || '');
+  },
+  skipSuccessfulRequests: true, // Don't count successful logins
+  handler: (req, res) => {
+    const resetTime = req.rateLimit.resetTime; // This is a Date object
+    const now = Date.now();
+    const waitTimeInSeconds = Math.round((resetTime - now) / 1000);
+    const waitTimeInMinutes = Math.ceil(waitTimeInSeconds / 60);
+
+    console.warn(`Rate limit exceeded for IP: ${req.ip}, User-Agent: ${req.headers['user-agent']}, Wait time: ${waitTimeInSeconds}s`);
+
+    // Set the standard 'Retry-After' header
+    res.setHeader('Retry-After', waitTimeInSeconds);
+
+    res.status(429).json({
+      error: "Too many login attempts from this IP",
+      message: `Too many login attempts. Please try again in ${waitTimeInMinutes} minute(s).`,
+      retryAfter: waitTimeInSeconds,
+      resetTime: resetTime.toISOString()
+    });
+  }
+});
+
+// Account-specific rate limiter with precise timing
+const accountLoginLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 10, // Max attempts per account per hour
+  keyGenerator: (req) => {
+    const identifier = req.body.email || req.body.ic || 'unknown';
+    return identifier + req.ip;
+  },
+  skipSuccessfulRequests: true,
+  handler: (req, res) => {
+    const resetTime = req.rateLimit.resetTime;
+    const now = Date.now();
+    const waitTimeInSeconds = Math.round((resetTime - now) / 1000);
+    const waitTimeInMinutes = Math.ceil(waitTimeInSeconds / 60);
+
+    console.warn(`Account rate limit exceeded for: ${req.body.email || req.body.ic}, Wait time: ${waitTimeInSeconds}s`);
+
+    res.setHeader('Retry-After', waitTimeInSeconds);
+    
+    res.status(429).json({
+      error: "Too many login attempts for this account",
+      message: `Too many login attempts for this account. Please try again in ${waitTimeInMinutes} minute(s).`,
+      retryAfter: waitTimeInSeconds,
+      resetTime: resetTime.toISOString()
+    });
+  }
+});
+
+// Registration rate limiter - prevents mass account creation
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // Limit each IP to 3 registration requests per hour
+  handler: (req, res) => {
+    const resetTime = req.rateLimit.resetTime;
+    const now = Date.now();
+    const waitTimeInSeconds = Math.round((resetTime - now) / 1000);
+    const waitTimeInMinutes = Math.ceil(waitTimeInSeconds / 60);
+
+    res.setHeader('Retry-After', waitTimeInSeconds);
+    
+    res.status(429).json({
+      error: "Too many accounts created from this IP",
+      message: `Too many registration attempts. Please try again in ${waitTimeInMinutes} minute(s).`,
+      retryAfter: waitTimeInSeconds
+    });
+  }
+});
+
+// General API rate limiter - protects against DoS attacks
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  handler: (req, res) => {
+    const resetTime = req.rateLimit.resetTime;
+    const waitTimeInSeconds = Math.round((resetTime - Date.now()) / 1000);
+
+    res.setHeader('Retry-After', waitTimeInSeconds);
+    
+    res.status(429).json({
+      error: "Too many requests from this IP",
+      message: `Too many requests. Please try again in ${Math.ceil(waitTimeInSeconds / 60)} minute(s).`,
+      retryAfter: waitTimeInSeconds
+    });
+  }
+});
+
+// Strict rate limiter for sensitive endpoints
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 requests per windowMs
+  handler: (req, res) => {
+    const resetTime = req.rateLimit.resetTime;
+    const waitTimeInSeconds = Math.round((resetTime - Date.now()) / 1000);
+
+    res.setHeader('Retry-After', waitTimeInSeconds);
+    
+    res.status(429).json({
+      error: "Too many requests to this endpoint",
+      message: `Too many requests to this endpoint. Please try again in ${Math.ceil(waitTimeInSeconds / 60)} minute(s).`,
+      retryAfter: waitTimeInSeconds
+    });
+  }
+});
 
 // Use cookie-parser middleware
 app.use(cookieParser());
@@ -27,12 +154,27 @@ app.use(cookieParser());
 // Load environment variables
 dotenv.config();
 
+// Security headers middleware
+app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+    next();
+});
+
+// Request logging middleware
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - IP: ${req.ip}`);
+    next();
+});
+
 // Middleware
-app.use(bodyParser.json({ limit: '10mb' })); // Increase the limit to 10mb
-app.use(bodyParser.urlencoded({ limit: '10mb', extended: true })); // Increase the limit for URL-encoded data
+app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
 app.use(cors({
-    origin: 'http://localhost:3000',  // Change to the client URL if different
-    credentials: true                 // Allow cookies to be sent
+    origin: 'http://localhost:3000',
+    credentials: true
 }));
 
 //////////////////////////////////////////////////////////////////////////////// MySQL connection////////////////////////////////////////////////////
@@ -43,51 +185,11 @@ const db = mysql.createConnection({
     database: "dbkl_project",
 });
 
-///////////////////////////////////////////////////////////////////////// Rate Limiting Configuration //////////////////////////////////////////////////
-
-// Login rate limiter - prevents brute force attacks
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Limit each IP to 5 login requests per windowMs
-  message: {
-    error: "Too many login attempts from this IP, please try again after 15 minutes."
-  },
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-});
-
-// Registration rate limiter - prevents mass account creation
-const registerLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // Limit each IP to 3 registration requests per hour
-  message: {
-    error: "Too many accounts created from this IP, please try again after an hour."
-  }
-});
-
-// General API rate limiter - protects against DoS attacks
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
-  message: {
-    error: "Too many requests from this IP, please try again later."
-  }
-});
-
-// Strict rate limiter for sensitive endpoints
-const strictLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 requests per windowMs
-  message: {
-    error: "Too many requests to this endpoint, please try again later."
-  }
-});
-
 /////////////////////////////////////////////////////////////////////////middleware to verify token//////////////////////////////////////////////////
 const verifyToken = (req, res, next) => {
-  const token = req.cookies.token; // Access token from cookies
+  const token = req.cookies.token;
 
-  console.log('Token from cookies:', token); // Debug log
+  console.log('Token from cookies:', token);
 
   if (!token) {
     return res.status(403).json({ message: 'No token provided.' });
@@ -98,12 +200,12 @@ const verifyToken = (req, res, next) => {
       console.error('Invalid token:', err);
       return res.status(401).json({ message: 'Invalid token.' });
     }
-    req.user = decoded; // Store decoded token information in req.user
+    req.user = decoded;
     next();
   });
 };
 
-const storage = multer.memoryStorage(); // Use memory storage for simplicity
+const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 /////////////////////////////////////////////////////////////////////// DB connection is established///////////////////////////////////////////////
@@ -113,38 +215,104 @@ db.connect(err => {
         process.exit(1);
     }
     console.log('Connected to the database');
-}); 
+});
+
+// Helper functions for tracking failed attempts
+const logFailedAttempt = (identifier, ip, userAgent) => {
+    const query = "INSERT INTO login_attempts (identifier, ip_address, user_agent, success, attempt_time) VALUES (?, ?, ?, ?, NOW())";
+    db.query(query, [identifier, ip, userAgent, false], (err) => {
+        if (err) console.error('Error logging failed attempt:', err);
+    });
+};
+
+const clearFailedAttempts = (identifier) => {
+    const query = "DELETE FROM login_attempts WHERE identifier = ? AND success = false";
+    db.query(query, [identifier], (err) => {
+        if (err) console.error('Error clearing failed attempts:', err);
+    });
+};
+
+// Store active locks in memory (for production, use Redis)
+const accountLocks = new Map();
+
+const isAccountLocked = (identifier) => {
+    const lock = accountLocks.get(identifier);
+    if (lock && lock.until > Date.now()) {
+        return lock;
+    }
+    if (lock) {
+        accountLocks.delete(identifier); // Remove expired lock
+    }
+    return null;
+};
+
+const lockAccount = (identifier, durationMs = 30 * 60 * 1000) => { // 30 minutes default
+    const lock = {
+        identifier,
+        until: Date.now() + durationMs,
+        lockedAt: new Date()
+    };
+    accountLocks.set(identifier, lock);
+    return lock;
+};
 
 /////////////////////////////////////////////////////////// Endpoint to handle GET request//////////////////////////////////////////////////////////
-app.get('/', (req, res) => {
+app.get('/', apiLimiter, (req, res) => {
     return res.json("From Backend Side!");
 });
 
-// Apply general API rate limiting to all routes
-app.use(apiLimiter);
-
-//async for using try catch function
-///////////////////////////////////////////////////////////////////////////// Login route/////////////////////////////////////////////////////////////
-app.post('/Login', loginLimiter, async (req, res) => {
+///////////////////////////////////////////////////////////////////////////// Enhanced Login route/////////////////////////////////////////////////////////////
+app.post('/Login', [loginLimiter, accountLoginLimiter], async (req, res) => {
     const { email, password, ic, userType } = req.body;
-    console.log("Request Received Login", req.body);
+    const clientIP = req.ip;
+    const userAgent = req.headers['user-agent'];
 
-    // Input validation based on userType
+    console.log(`Login attempt from IP: ${clientIP}, User-Type: ${userType}`);
+
+    // Enhanced input validation
     if (userType === "Admin") {
         if (!email || !password) {
+            console.warn(`Missing credentials - Admin login attempt from IP: ${clientIP}`);
             return res.status(400).json({ message: 'Email and password are required for Admin login.' });
+        }
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({ message: 'Invalid email format.' });
         }
     } else if (userType === "users") {
         if (!ic || !password) {
+            console.warn(`Missing credentials - User login attempt from IP: ${clientIP}`);
             return res.status(400).json({ message: 'IC and password are required for User login.' });
         }
+        if (ic.length < 8) {
+            return res.status(400).json({ message: 'Invalid IC format.' });
+        }
     } else {
+        console.warn(`Invalid user type: ${userType} from IP: ${clientIP}`);
         return res.status(400).json({ message: 'Invalid user type.' });
+    }
+
+    // Password length check
+    if (password.length < 1) {
+        return res.status(400).json({ message: 'Password is required.' });
     }
 
     try {
         let query;
         let parameter;
+        let identifier;
+
+        // Check for account lock
+        identifier = userType === "Admin" ? email : ic;
+        const accountLock = isAccountLocked(identifier);
+        if (accountLock) {
+            const remainingTime = Math.ceil((accountLock.until - Date.now()) / 1000 / 60);
+            console.warn(`Login attempt to locked account: ${identifier} from IP: ${clientIP}`);
+            return res.status(423).json({ 
+                message: `Account is temporarily locked due to too many failed attempts. Please try again in ${remainingTime} minute(s).`,
+                retryAfter: Math.ceil((accountLock.until - Date.now()) / 1000)
+            });
+        }
 
         // Determine query and parameter based on userType
         if (userType === "Admin") {
@@ -158,35 +326,83 @@ app.post('/Login', loginLimiter, async (req, res) => {
         // Execute database query
         db.query(query, parameter, async (err, results) => {
             if (err) {
-                console.error("Database error:", err);
+                console.error(`Database error during login for ${identifier}:`, err);
                 return res.status(500).json({ message: 'Server error' });
             }
 
             if (results.length === 0) {
-                return res.status(401).json({ message: 'No user found!' });
+                console.warn(`Failed login attempt - User not found: ${identifier} from IP: ${clientIP}`);
+                logFailedAttempt(identifier, clientIP, userAgent);
+                
+                // Check if we should lock the account (after multiple failed attempts)
+                const failedAttemptsQuery = "SELECT COUNT(*) as count FROM login_attempts WHERE identifier = ? AND success = false AND attempt_time > DATE_SUB(NOW(), INTERVAL 30 MINUTE)";
+                db.query(failedAttemptsQuery, [identifier], (err, attemptResults) => {
+                    if (!err && attemptResults[0].count >= 5) {
+                        const lock = lockAccount(identifier);
+                        console.warn(`Account locked due to multiple failed attempts: ${identifier}`);
+                    }
+                });
+
+                return res.status(401).json({ message: 'Invalid credentials' });
             }
 
-            const user = results[0]; // Use the first user found in the database
+            const user = results[0];
 
             // Compare password with the hashed password in the database
             const isMatch = await bcrypt.compare(password, user.password);
             if (!isMatch) {
-                return res.status(401).json({ message: 'Incorrect password' });
+                console.warn(`Failed login attempt - Invalid password for: ${identifier} from IP: ${clientIP}`);
+                logFailedAttempt(identifier, clientIP, userAgent);
+
+                // Check if we should lock the account
+                const failedAttemptsQuery = "SELECT COUNT(*) as count FROM login_attempts WHERE identifier = ? AND success = false AND attempt_time > DATE_SUB(NOW(), INTERVAL 30 MINUTE)";
+                db.query(failedAttemptsQuery, [identifier], (err, attemptResults) => {
+                    if (!err && attemptResults[0].count >= 5) {
+                        const lock = lockAccount(identifier);
+                        console.warn(`Account locked due to multiple failed attempts: ${identifier}`);
+                    }
+                });
+
+                return res.status(401).json({ message: 'Invalid credentials' });
+            }
+
+            // Check if account is locked in database
+            if (user.is_locked) {
+                console.warn(`Login attempt to locked account: ${identifier} from IP: ${clientIP}`);
+                return res.status(423).json({ message: 'Account is locked. Please contact administrator.' });
             }
 
             // Create a JSON Web Token (JWT) for authenticated users
             const token = jwt.sign(
-                { id: user.id, email: user.email || user.ic, userType: userType },
+                { 
+                    id: user.id, 
+                    email: user.email || user.ic, 
+                    userType: userType,
+                    loginTime: Date.now()
+                },
                 process.env.LOGIN_KEY,
                 { expiresIn: '1h' }
             );
 
             // Set the JWT as an HttpOnly cookie
             res.cookie('token', token, {
-                httpOnly: true,                       // Prevents client-side JavaScript access
-                secure: process.env.NODE_ENV === 'production', // Only send over HTTPS in production
-                sameSite: 'strict',                   // Strictly same-site to avoid CSRF
-                maxAge: 3600000                       // Cookie expiration set to 1 hour
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'strict',
+                maxAge: 3600000
+            });
+
+            // Log successful login
+            console.log(`Successful login: ${identifier} from IP: ${clientIP}`);
+
+            // Clear any failed attempts on successful login
+            clearFailedAttempts(identifier);
+            accountLocks.delete(identifier); // Remove lock on successful login
+
+            // Log successful attempt
+            const successQuery = "INSERT INTO login_attempts (identifier, ip_address, user_agent, success, attempt_time) VALUES (?, ?, ?, ?, NOW())";
+            db.query(successQuery, [identifier, clientIP, userAgent, true], (err) => {
+                if (err) console.error('Error logging successful attempt:', err);
             });
 
             // Respond with user info (without password) and success message
@@ -200,13 +416,13 @@ app.post('/Login', loginLimiter, async (req, res) => {
             });
         });
     } catch (error) {
-        console.error('Error during login:', error);
-        return res.status(500).json({ message: 'Server error', error: error.message });
+        console.error(`Unexpected error during login from IP: ${clientIP}:`, error);
+        return res.status(500).json({ message: 'Server error' });
     }
 });
 
 ///////////////////////////////////////////////////////////////////// check-account-exist endpoint////////////////////////////////////////////////
-app.post('/check-account-exist', strictLimiter, (req, res) => {
+app.post('/check-account-exist', apiLimiter, (req, res) => {
     const { username, email, ic, userType } = req.body;
 
     if(userType === "Admin"){
@@ -224,11 +440,9 @@ app.post('/check-account-exist', strictLimiter, (req, res) => {
             if (err) return res.status(500).json({ message: 'Error checking account existence.' });
 
             if (usernameResults.length > 0) {
-                // Return a 409 Conflict status for an existing IC
                 return res.status(409).json({ message: 'An account already exists with this email.' });
             }
 
-            // If no existing account with IC, allow creation
             return res.json({ message: 'No existing account with this email or username.' });
         });
     });
@@ -240,11 +454,9 @@ app.post('/check-account-exist', strictLimiter, (req, res) => {
             
             
             if (icResults.length > 0) {
-                 // Return a 409 Conflict status for an existing IC
                 return res.status(409).json({ message: 'An account already exists with this IC.' });
             }
 
-            // If no existing account with IC, allow creation
             return res.json({message: "No existing account with this IC."})
         
         });
@@ -255,28 +467,26 @@ app.post('/check-account-exist', strictLimiter, (req, res) => {
 
 /////////////////////////////////////////////////////////////////////////////// Register endpoint///////////////////////////////////////////////////
 app.post('/register', registerLimiter, async (req, res) => {
-    console.log('Received request:', req.body);  // Log the request body
+    console.log('Received request:', req.body);
     const { username, email, password, ic, userType} = req.body;
 
     if(userType === "Admin"){
-        if (!username || !email || !password || password.length < 6) {
-            return res.status(400).json({ message: 'All fields are required and password must be at least 6 characters long.' });
+        if (!username || !email || !password || !isStrongPassword(password)) {
+            return res.status(400).json({ message: 'All fields are required and password must be at least 8 characters with uppercase, lowercase, number, and symbol.' });
         }
     }else{
-        if(!ic || !password || password.length < 6) {
-            return res.status(400).json({ message: 'All fields are required and password must be at least 6 characters long.' });
+        if(!ic || !password || !isStrongPassword(password)) {
+            return res.status(400).json({ message: 'All fields are required and password must be at least 8 characters with uppercase, lowercase, number, and symbol.' });
         }
     }
     
     try {
-        const saltRounds = 10; // Typically a value between 10 and 12
-        // Generate salt and hash the password
+        const saltRounds = 10;
         const hashedPassword = await bcrypt.hash(password, saltRounds);
 
         let parameter;
         let query; 
 
-        //differentiate user and admin and save to different database 
         if(userType === "Admin"){
             query = "INSERT INTO admin (email, username, password) VALUES (?, ?, ?)";
             parameter = [email, username, hashedPassword]
@@ -308,16 +518,15 @@ app.post('/register', registerLimiter, async (req, res) => {
 });
 
 /////////////////////////////////////////////////////////////logout//////////////////////////////////////////////////
-app.post('/logout', (req, res) =>{
-    // Clear the JWT cookie by setting it to an expired date
+app.post('/logout', apiLimiter, (req, res) =>{
     console.log(req.body);
     
     res.clearCookie('token',{
-        httpOnly: true,// Ensures the cookie can't be accessed by JavaScript
-        secure: process.env.NODE_ENV === 'production', // Ensures the cookie is only sent over HTTPS in production
-        sameSite: 'strict', // SameSite policy to prevent CSRF attacks
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
     });
-     // Send a response indicating the user is logged out
+     
     return res.json({ message: 'Logged out successfully' });
 });
 
@@ -325,11 +534,11 @@ const uploadToImgBB = async (imageBase64) => {
     try {
         const form = new FormData();
         form.append('key', process.env.IMGBB_API_KEY);
-        form.append('image', imageBase64); // Base64 string without prefixes
+        form.append('image', imageBase64);
 
         const response = await axios.post('https://api.imgbb.com/1/upload', form, {
             headers: form.getHeaders(),
-            maxBodyLength: Infinity, // To handle large images
+            maxBodyLength: Infinity,
         });
 
         console.log('ImgBB Upload Response:', response.data);
@@ -348,10 +557,9 @@ const uploadToImgBB = async (imageBase64) => {
 };
 
 ///////////////////////////////////////////////////////////// update upload attempt status/////////////////////////////////////////////////////////
-app.post('/updateUploadAttempt', verifyToken, strictLimiter, (req, res) => {
+app.post('/updateUploadAttempt', verifyToken, apiLimiter, (req, res) => {
     const userId = req.user.id;
     const uploadAttemptId = req.body.uploadAttemptId;
-    // Assume you have a database connection here
     db.query('UPDATE users SET upload_attempts = ? WHERE id = ?',[uploadAttemptId, userId], (err, result) => {
         if (err) {
             return res.status(500).send('Error updating upload attempt');
@@ -361,7 +569,7 @@ app.post('/updateUploadAttempt', verifyToken, strictLimiter, (req, res) => {
 });
 
 //////////////////////////////////////////////////////////////////fetch upload attempts/////////////////////////////////////////////////////////////
-app.get('/getUploadAttempts', verifyToken, (req, res) => {
+app.get('/getUploadAttempts', verifyToken, apiLimiter, (req, res) => {
     const userId = req.user.id;  
 
     const query = 'SELECT upload_attempts FROM users WHERE id = ?';
@@ -372,10 +580,9 @@ app.get('/getUploadAttempts', verifyToken, (req, res) => {
             return res.status(500).json({ message: 'Error retrieving upload attempts', error: err });
         }
 
-        console.log('Query result:', results);  // Log query result to see its structure
+        console.log('Query result:', results);
 
         if (results && results.length > 0) {
-            // Handle null value for upload_attempts
             const uploadAttempts = results[0].upload_attempts;
             res.status(200).json({ uploadAttempts });
         } else {
@@ -385,26 +592,23 @@ app.get('/getUploadAttempts', verifyToken, (req, res) => {
 });
 
 /////////////////////////////////////////////////// Photo Upload Endpoint///////////////////////////////////////////////
-app.post('/uploadImage', upload.single('file'), verifyToken, strictLimiter, (req, res) => {
+app.post('/uploadImage', strictLimiter, upload.single('file'), verifyToken, (req, res) => {
     console.log("File Upload Request:", req.file);
-    const userId = req.user.id; // Retrieve userId from the decoded token
+    const userId = req.user.id;
 
     if (!req.file) {
         return res.status(400).json({ message: 'Image file is required.' });
     }
 
-    // Ensure the uploaded file is an image
     const validMimeTypes = ['image/jpeg', 'image/png', 'image/jpg'];
     if (!validMimeTypes.includes(req.file.mimetype)) {
         return res.status(400).json({ message: 'Invalid file type. Only JPG, PNG are allowed.' });
     }
 
-    // Convert buffer to base64
-    const imageBuffer = req.file.buffer; // Get the buffer directly from req.file
+    const imageBuffer = req.file.buffer;
     const imageBase64 = imageBuffer.toString('base64');
     const imageContentType = req.file.mimetype;
 
-    // Log the base64 string length and prefix for debugging
     console.log('Image Base64 Length:', imageBase64.length);
     console.log('Image Base64 Prefix:', imageBase64.substring(0, 30));
 
@@ -424,17 +628,15 @@ app.post('/uploadImage', upload.single('file'), verifyToken, strictLimiter, (req
 });
 
 /////////////////////////////////////////////////////////// Compare Faces Endpoint//////////////////////////////////////
-app.post('/compareFaces', verifyToken, strictLimiter, async (req, res) => {
+app.post('/compareFaces', strictLimiter, verifyToken, async (req, res) => {
     console.log('User object:', req.user);
     const { capturedImage } = req.body;
     const userId = req.user.id;
 
-    // Ensure capturedImage is received
     if (!capturedImage) {
         return res.status(400).json({ message: 'No captured image provided.' });
     }
 
-    // Retrieve the stored image for the user from MySQL
     const query = 'SELECT images FROM users WHERE id = ?';
     db.query(query, [userId], async (err, results) => {
         if (err) {
@@ -449,30 +651,25 @@ app.post('/compareFaces', verifyToken, strictLimiter, async (req, res) => {
 
         const storedImageBase64 = results[0].images;
 
-        // Log the stored image base64 string
         console.log('Stored Image Base64 Length:', storedImageBase64.length);
         console.log('Stored Image Base64 Prefix:', storedImageBase64.substring(0, 30));
 
-        // Ensure images are present
         if (!storedImageBase64 || !capturedImage) {
             console.error('One or both images are missing.');
             return res.status(400).json({ message: 'Invalid image data.' });
         }
 
         try {
-            // Upload stored image to ImgBB
             const storedImageUrl = await uploadToImgBB(storedImageBase64);
             if (!storedImageUrl) {
                 return res.status(500).json({ message: 'Failed to upload stored image to ImgBB.' });
             }
 
-            // Upload captured image to ImgBB
             const capturedImageUrl = await uploadToImgBB(capturedImage);
             if (!capturedImageUrl) {
                 return res.status(500).json({ message: 'Failed to upload captured image to ImgBB.' });
             }
 
-            // Verify that the URLs are accessible
             const verifyImageUrl = async (url) => {
                 try {
                     const response = await axios.get(url);
@@ -492,7 +689,6 @@ app.post('/compareFaces', verifyToken, strictLimiter, async (req, res) => {
                 return res.status(400).json({ message: 'Invalid or inaccessible image URLs.' });
             }
 
-            // Prepare data for Face++ API using image URLs
             const faceData = querystring.stringify({
                 api_key: process.env.FACE_API_KEY,
                 api_secret: process.env.FACE_API_SECRET,
@@ -502,7 +698,6 @@ app.post('/compareFaces', verifyToken, strictLimiter, async (req, res) => {
 
             console.log('Sending data to Face++:', faceData);
 
-            // Make POST request to Face++ API
             const facePlusPlusResponse = await axios.post(
                 'https://api-us.faceplusplus.com/facepp/v3/compare',
                 faceData,
@@ -538,11 +733,11 @@ app.post('/compareFaces', verifyToken, strictLimiter, async (req, res) => {
 });
 
 //////////////////////////////////////////////Save Location/////////////////////////////////////////////////////////
-app.post('/saveLocation', verifyToken, strictLimiter, async (req, res) => {
+app.post('/saveLocation', verifyToken, apiLimiter, async (req, res) => {
     const { capturedLatitude, capturedLongitude, selectedLatitude, selectedLongitude, selectedAddress } = req.body;
     const userId = req.user.id;
 
-    console.log('Endpoint reached'); // Test log
+    console.log('Endpoint reached');
 
     const query = `
         INSERT INTO users (id, captured_latitude, captured_longitude, selected_latitude, selected_longitude, selected_address)
@@ -570,9 +765,9 @@ app.post('/saveLocation', verifyToken, strictLimiter, async (req, res) => {
 });
 
 ///////////////////////////////////////////////////////////////////////Endpoint to save status in the users table///////////////////////////////////
-app.post('/saveStatus', verifyToken, strictLimiter, async (req, res) => {
+app.post('/saveStatus', verifyToken, apiLimiter, async (req, res) => {
     const { status } = req.body;
-    const userId = req.user.id;  // userId is obtained from the token
+    const userId = req.user.id;
 
     if (!status) {
         return res.status(400).json({ message: 'Status is required' });
@@ -596,9 +791,9 @@ app.post('/saveStatus', verifyToken, strictLimiter, async (req, res) => {
 });
 
 ///////////////////////////////////////////////////// Endpoint to save reason in the users table////////////////////////////////
-app.post('/saveReason', verifyToken, strictLimiter, async (req, res) => {
+app.post('/saveReason', verifyToken, apiLimiter, async (req, res) => {
     const { reason } = req.body;
-    const userId = req.user.id;  // userId is obtained from the token
+    const userId = req.user.id;
 
     if (!reason) {
         return res.status(400).json({ message: 'Reason is required' });
@@ -622,8 +817,7 @@ app.post('/saveReason', verifyToken, strictLimiter, async (req, res) => {
 });
     
 /////////////////////////////////////RETRIVE USERS DATABASE INTO ADMIN//////////////////////////////////
-// Define a route to fetch data (example: fetching all users)
-app.get('/users', verifyToken, (req, res) => {
+app.get('/users', apiLimiter, (req, res) => {
     const query = 'SELECT * FROM users';
     db.query(query, (error, results) => {
         if (error) {
@@ -637,7 +831,7 @@ app.get('/users', verifyToken, (req, res) => {
 });
 
 //////////////////////////////////////////////////////////////////Delete user route////////////////////////////////////////////////////////////
-app.delete('/users/:id', verifyToken, strictLimiter, (req, res) => {
+app.delete('/users/:id', apiLimiter, (req, res) => {
     const userId = req.params.id;
     const deleteQuery = 'DELETE FROM users WHERE id = ?';
 
@@ -656,7 +850,7 @@ app.delete('/users/:id', verifyToken, strictLimiter, (req, res) => {
 });
 
 ////////////////////////////////////////////////////////////Edit users information////////////////////////////////////
-app.put('/users/:userId', verifyToken, strictLimiter, (req, res) => {
+app.put('/users/:userId', apiLimiter, (req, res) => {
     const userId = req.params.userId;
     const { ic, status, reason, selected_address, selected_latitude, selected_longitude } = req.body;
 

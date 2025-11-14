@@ -11,10 +11,19 @@ export const isValidIC = (ic) =>{
 };
 
 export const isPasswordValid = (password) => {
-    return password.length >= 6; // Ensure password is at least 6 characters
+    if (typeof password !== 'string') {
+        return false;
+    }
+
+    const hasMinLength = password.length >= 8;
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasLowercase = /[a-z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const hasSymbol = /[^A-Za-z0-9]/.test(password);
+
+    return hasMinLength && hasUppercase && hasLowercase && hasNumber && hasSymbol;
 };
 
 export const arePasswordsMatching = (password, confirmPassword) => {
     return password === confirmPassword; // Check if passwords match
 };
-
