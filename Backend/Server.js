@@ -19,6 +19,19 @@ import jwt from 'jsonwebtoken'; // import json web token
 
 const app = express();
 
+const isStrongPassword = (password) => {
+    if (typeof password !== 'string') {
+        return false;
+    }
+    const hasMinLength = password.length >= 8;
+    const hasUppercase = /[A-Z]/.test(password);
+    const hasLowercase = /[a-z]/.test(password);
+    const hasNumber = /\d/.test(password);
+    const hasSymbol = /[^A-Za-z0-9]/.test(password);
+
+    return hasMinLength && hasUppercase && hasLowercase && hasNumber && hasSymbol;
+};
+
 
 // Use cookie-parser middleware
 app.use(cookieParser());
@@ -234,12 +247,12 @@ app.post('/register', async (req, res) => {
     const { username, email, password, ic, userType} = req.body;
 
     if(userType === "Admin"){
-        if (!username || !email || !password || password.length < 6) {
-            return res.status(400).json({ message: 'All fields are required and password must be at least 6 characters long.' });
+        if (!username || !email || !password || !isStrongPassword(password)) {
+            return res.status(400).json({ message: 'All fields are required and password must be at least 8 characters with uppercase, lowercase, number, and symbol.' });
         }
     }else{
-        if(!ic || !password || password.length < 6) {
-            return res.status(400).json({ message: 'All fields are required and password must be at least 6 characters long.' });
+        if(!ic || !password || !isStrongPassword(password)) {
+            return res.status(400).json({ message: 'All fields are required and password must be at least 8 characters with uppercase, lowercase, number, and symbol.' });
         }
     }
     

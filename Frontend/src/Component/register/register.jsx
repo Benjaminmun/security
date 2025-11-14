@@ -22,31 +22,54 @@ function Register() {
     const passwordRef = useRef(null);
     const passwordMessageRef = useRef(null);
     const passwordStrengthRef = useRef(null);
+    const passwordProgressRef = useRef(null);
     const confirmPasswordRef = useRef(null);
     const confirmPasswordMessageRef = useRef(null);
     const confirmPasswordStrengthRef = useRef(null);
+    const confirmPasswordProgressRef = useRef(null);
 
     useEffect(() => {
         const handleInput = (event) => {
             const { target } = event;
             const value = target.value;
-            const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(value);
             const isPasswordField = target === passwordRef.current;
             const messageRef = isPasswordField ? passwordMessageRef : confirmPasswordMessageRef;
             const strengthRef = isPasswordField ? passwordStrengthRef : confirmPasswordStrengthRef;
+            const progressRef = isPasswordField ? passwordProgressRef : confirmPasswordProgressRef;
 
-            messageRef.current.style.display = value.length > 0 ? "block" : "none";
+            if (!messageRef.current || !strengthRef.current || !progressRef.current) return;
 
-            if (value.length <= 5 || !hasSymbol) {
-                strengthRef.current.innerHTML = "weak";
-                messageRef.current.style.color = "#ff5925";
-            } else if (value.length >= 6 && value.length < 8 && hasSymbol) {
-                strengthRef.current.innerHTML = "medium";
-                messageRef.current.style.color = "#FFA500";
-            } else if (value.length >= 8 && hasSymbol) {
-                strengthRef.current.innerHTML = "strong";
-                messageRef.current.style.color = "#26d730";
+            if (!value) {
+                messageRef.current.style.display = "none";
+                strengthRef.current.innerHTML = "";
+                progressRef.current.style.width = "0%";
+                return;
             }
+
+            messageRef.current.style.display = "block";
+
+            const hasMinLength = value.length >= 8;
+            const hasUppercase = /[A-Z]/.test(value);
+            const hasLowercase = /[a-z]/.test(value);
+            const hasNumber = /\d/.test(value);
+            const hasSymbol = /[^A-Za-z0-9]/.test(value);
+            const metCount = [hasMinLength, hasUppercase, hasLowercase, hasNumber, hasSymbol].filter(Boolean).length;
+
+            let strength = "weak";
+            let color = "#ff5925";
+
+            if (metCount >= 5) {
+                strength = "strong";
+                color = "#26d730";
+            } else if (metCount >= 3) {
+                strength = "medium";
+                color = "#FFA500";
+            }
+
+            strengthRef.current.innerHTML = strength;
+            messageRef.current.style.color = color;
+            progressRef.current.style.width = `${(metCount / 5) * 100}%`;
+            progressRef.current.style.backgroundColor = color;
         };
 
         const currentPasswordRef = passwordRef.current;
@@ -78,7 +101,7 @@ function Register() {
         }
 
         if (!isPasswordValid(password)) {
-            setRegisterStatus('Password must be at least 6 characters.');
+            setRegisterStatus('Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.');
             return;
         }
 
@@ -159,8 +182,17 @@ function Register() {
                             <div onClick={() => setPasswordVisible(!passwordVisible)}>
                                 {passwordVisible ? <MdVisibility id="password-visible" /> : <AiFillEyeInvisible id="password-visible" />}
                             </div>
-
-                            <p id="message" ref={passwordMessageRef}>Password is <span id="strength" ref={passwordStrengthRef}></span></p>
+                        </div>
+                        <div className="passwordFeedback">
+                            <div className="passwordStrengthBar">
+                                <div className="passwordStrengthFill" ref={passwordProgressRef}></div>
+                            </div>
+                            <p className="passwordMessage" ref={passwordMessageRef}>
+                                Password is <span className="passwordStrength" ref={passwordStrengthRef}></span>
+                            </p>
+                            <p className='passwordRequirements'>
+                                Use at least 8 characters, including uppercase, lowercase, a number, and a symbol.
+                            </p>
                         </div>
                     </div>
 
@@ -180,8 +212,14 @@ function Register() {
                             <div onClick={() => setConfirmPasswordVisible(!confirmPasswordVisible)}>
                                 {confirmPasswordVisible ? <MdVisibility id="password-visible" /> : <AiFillEyeInvisible id="password-visible" />}
                             </div>
-
-                            <p id="message" ref={confirmPasswordMessageRef}>Password is <span id="strength" ref={confirmPasswordStrengthRef}></span></p>
+                        </div>
+                        <div className="passwordFeedback">
+                            <div className="passwordStrengthBar">
+                                <div className="passwordStrengthFill" ref={confirmPasswordProgressRef}></div>
+                            </div>
+                            <p className="passwordMessage" ref={confirmPasswordMessageRef}>
+                                Password is <span className="passwordStrength" ref={confirmPasswordStrengthRef}></span>
+                            </p>
                         </div>
                     </div>
 
