@@ -13,6 +13,9 @@ import { BsFillShieldLockFill } from "react-icons/bs";
 import { AiFillEyeInvisible } from "react-icons/ai";
 import { MdVisibility } from "react-icons/md";
 
+// 2FA component
+import TwoFactorVerify from '../2fa/TwoFactorVerify';
+
 
 function LoginPage() {
     const [email, setEmail] = useState('');
@@ -22,6 +25,11 @@ function LoginPage() {
     const [loginStatus, setLoginStatus] = useState('');
     const [userType, setUserType] = useState('');
     const [showLoginForm, setShowLoginForm] = useState(false);
+
+    // 2FA states
+    const [requires2FA, setRequires2FA] = useState(false);
+    const [twoFactorUserId, setTwoFactorUserId] = useState(null);
+    const [twoFactorUserType, setTwoFactorUserType] = useState('');
 
     // Default admin credentials
     const defaultAdmin = {
@@ -58,22 +66,47 @@ function LoginPage() {
             });
 
             if (response.status === 200) {
-                window.confirm('Login successful');
-                setTimeout(() => {
-                    if (userType === 'users') {
-                        window.location.href = '/homepage';
-                    } else {
-                        window.location.href = '/adminhomepage';
-                    }
-                }, 2000);
+                // Check if 2FA is required
+                if (response.data.requiresTwoFactor) {
+                    // Show 2FA verification modal
+                    setTwoFactorUserId(response.data.userId);
+                    setTwoFactorUserType(response.data.userType);
+                    setRequires2FA(true);
+                } else {
+                    // No 2FA required - proceed with normal login
+                    window.confirm('Login successful');
+                    setTimeout(() => {
+                        if (userType === 'users') {
+                            window.location.href = '/homepage';
+                        } else {
+                            window.location.href = '/adminhomepage';
+                        }
+                    }, 2000);
+                }
             }
         } catch (error) {
             setLoginStatus('Login failed. Please try again.');
         }
     };
 
+    const handle2FACancel = () => {
+        setRequires2FA(false);
+        setTwoFactorUserId(null);
+        setTwoFactorUserType('');
+        setLoginStatus('');
+    };
+
     return (
         <div className='loginPage'>
+            {/* 2FA Verification Modal */}
+            {requires2FA && (
+                <TwoFactorVerify
+                    userId={twoFactorUserId}
+                    userType={twoFactorUserType}
+                    onCancel={handle2FACancel}
+                />
+            )}
+
             <div className="container">
                 <div className="headerDiv">
                     <h1>Login</h1>

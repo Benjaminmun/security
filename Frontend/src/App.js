@@ -7,6 +7,7 @@ import Camera from './Component/Camera/Camera';
 import AdminHomepage from './Component/adminhomepage/adminhompage';
 import ManageUsers from './Component/adminhomepage/manageuser';
 import CompletePage from './Component/Camera/CompletePage';
+import SecuritySettings from './Component/settings/SecuritySettings';
 
 const router = createBrowserRouter([
     { 
@@ -40,6 +41,10 @@ const router = createBrowserRouter([
     {
         path: '/CompletePage',
         element: <div><CompletePage /></div>
+    },
+    {
+        path: '/security-settings',
+        element: <div><SecuritySettings /></div>
     }
 ]);
 

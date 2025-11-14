@@ -11,9 +11,9 @@ import axios from 'axios';
 
 function Homepage() {
     const dialogRef = useRef(null);
-    const [file, setFile] = useState(null); 
+    const [file, setFile] = useState(null);
     const [remainingAttempts, setRemainingAttempts] = useState(null); // Track remaining upload attempts
-    const [token, setToken] = useState(null);   
+    const [token, setToken] = useState(null);
     const [isUploaded, setIsUploaded] = useState(false);
     const navigate = useNavigate();
 
@@ -110,10 +110,10 @@ function Homepage() {
             const response = await axios.get('http://localhost:8081/getUploadAttempts', {
                 withCredentials: true,
             });
-    
+
             if (response.status === 200) {
                 setRemainingAttempts(response.data.uploadAttempts);
-                setIsUploaded(false)
+                setIsUploaded(false);
             } else {
                 console.error('Failed to fetch upload attempts');
             }
@@ -248,6 +248,7 @@ function Homepage() {
 
             {/* start from here */}
             <button className={styles.main_btn}><Link to="/camera">Take Picture</Link></button>
+            <button className={styles.main_btn}><Link to="/security-settings">Security Settings</Link></button>
             <button className={styles.main_btn} onClick={logout}>Logout</button>
            </div>
     </div>
