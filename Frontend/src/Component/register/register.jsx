@@ -18,36 +18,60 @@ function Register() {
     const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
     const [registerStatus, setRegisterStatus] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [countdown, setCountdown] = useState(null);
 
     // Password and Confirm Password refs for validation
     const passwordRef = useRef(null);
     const passwordMessageRef = useRef(null);
     const passwordStrengthRef = useRef(null);
+    const passwordProgressRef = useRef(null);
     const confirmPasswordRef = useRef(null);
     const confirmPasswordMessageRef = useRef(null);
     const confirmPasswordStrengthRef = useRef(null);
+    const confirmPasswordProgressRef = useRef(null);
 
     useEffect(() => {
         const handleInput = (event) => {
             const { target } = event;
             const value = target.value;
-            const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(value);
             const isPasswordField = target === passwordRef.current;
             const messageRef = isPasswordField ? passwordMessageRef : confirmPasswordMessageRef;
             const strengthRef = isPasswordField ? passwordStrengthRef : confirmPasswordStrengthRef;
+            const progressRef = isPasswordField ? passwordProgressRef : confirmPasswordProgressRef;
 
-            messageRef.current.style.display = value.length > 0 ? "block" : "none";
+            if (!messageRef.current || !strengthRef.current || !progressRef.current) return;
 
-            if (value.length <= 5 || !hasSymbol) {
-                strengthRef.current.innerHTML = "weak";
-                messageRef.current.style.color = "#ff5925";
-            } else if (value.length >= 6 && value.length < 8 && hasSymbol) {
-                strengthRef.current.innerHTML = "medium";
-                messageRef.current.style.color = "#FFA500";
-            } else if (value.length >= 8 && hasSymbol) {
-                strengthRef.current.innerHTML = "strong";
-                messageRef.current.style.color = "#26d730";
+            if (!value) {
+                messageRef.current.style.display = "none";
+                strengthRef.current.innerHTML = "";
+                progressRef.current.style.width = "0%";
+                return;
             }
+
+            messageRef.current.style.display = "block";
+
+            const hasMinLength = value.length >= 8;
+            const hasUppercase = /[A-Z]/.test(value);
+            const hasLowercase = /[a-z]/.test(value);
+            const hasNumber = /\d/.test(value);
+            const hasSymbol = /[^A-Za-z0-9]/.test(value);
+            const metCount = [hasMinLength, hasUppercase, hasLowercase, hasNumber, hasSymbol].filter(Boolean).length;
+
+            let strength = "weak";
+            let color = "#ff5925";
+
+            if (metCount >= 5) {
+                strength = "strong";
+                color = "#26d730";
+            } else if (metCount >= 3) {
+                strength = "medium";
+                color = "#FFA500";
+            }
+
+            strengthRef.current.innerHTML = strength;
+            messageRef.current.style.color = color;
+            progressRef.current.style.width = `${(metCount / 5) * 100}%`;
+            progressRef.current.style.backgroundColor = color;
         };
 
         const currentPasswordRef = passwordRef.current;
@@ -70,9 +94,32 @@ function Register() {
         };
     }, []);
 
+    // Countdown timer for rate limiting
+    const startCountdown = (seconds) => {
+        setCountdown(seconds);
+        const timer = setInterval(() => {
+            setCountdown(prev => {
+                if (prev <= 1) {
+                    clearInterval(timer);
+                    setRegisterStatus('You can now try registering again.');
+                    return null;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+    };
+
+    const formatTime = (seconds) => {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    };
+
     const handleSubmit = async (event) => {
         event.preventDefault();
         setIsLoading(true);
+        setRegisterStatus('');
+        setCountdown(null);
 
         if (!arePasswordsMatching(password, confirmPassword)) {
             setRegisterStatus('Passwords do not match.');
@@ -81,7 +128,7 @@ function Register() {
         }
 
         if (!isPasswordValid(password)) {
-            setRegisterStatus('Password must be at least 6 characters.');
+            setRegisterStatus('Password must be at least 8 characters and include uppercase, lowercase, number, and symbol.');
             setIsLoading(false);
             return;
         }
@@ -102,15 +149,18 @@ function Register() {
                 setRegisterStatus('An account already exists!');
                 setIsLoading(false);
                 return;
-            } else {
-                window.confirm('Sign Up Successful');
             }
         } catch (error) {
-            // Handle rate limiting errors
-            if (error.status === 429) {
-                setRegisterStatus('Too many registration attempts. Please try again later.');
+            // Handle rate limiting errors with precise timing
+            if (error.response && error.response.status === 429) {
+                const responseData = error.response.data;
+                const retryAfter = responseData.retryAfter || 3600; // Default to 1 hour
+                const waitMinutes = Math.ceil(retryAfter / 60);
+                
+                setRegisterStatus(`Too many registration attempts. Please try again in ${waitMinutes} minute(s).`);
+                startCountdown(retryAfter);
             } else {
-                setRegisterStatus('Error checking account existence: ' + error.message);
+                setRegisterStatus('Error checking account existence: ' + (error.message || 'Unknown error'));
             }
             setIsLoading(false);
             return;
@@ -120,14 +170,20 @@ function Register() {
         try {
             const response = await registerUser(username, ic, password);
             if (response.message === 'Sign Up Successful') {
+                setRegisterStatus('Registration successful! Redirecting to login...');
                 setTimeout(() => {
                     window.location.href = '/login';
                 }, 2000);
             }
         } catch (error) {
-            // Handle rate limiting errors
-            if (error.status === 429) {
-                setRegisterStatus('Too many registration attempts. Please try again later.');
+            // Handle rate limiting errors with precise timing
+            if (error.response && error.response.status === 429) {
+                const responseData = error.response.data;
+                const retryAfter = responseData.retryAfter || 3600; // Default to 1 hour
+                const waitMinutes = Math.ceil(retryAfter / 60);
+                
+                setRegisterStatus(`Too many registration attempts. Please try again in ${waitMinutes} minute(s).`);
+                startCountdown(retryAfter);
             } else {
                 setRegisterStatus('Registration failed. Please try again.');
             }
@@ -138,15 +194,21 @@ function Register() {
         setIsLoading(false);
     };
 
+    const togglePasswordVisibility = () => {
+        if (!isLoading && !countdown) setPasswordVisible(!passwordVisible);
+    };
+
+    const toggleConfirmPasswordVisibility = () => {
+        if (!isLoading && !countdown) setConfirmPasswordVisible(!confirmPasswordVisible);
+    };
+
     return (
         <div className='loginPage'>
             <div className="container">
                 <div className="headerDiv">
-                <h2 style={{ fontWeight: 'bold' }}>User Registration</h2>
+                    <h2 style={{ fontWeight: 'bold' }}>User Registration</h2>
                 </div>
                 <form onSubmit={handleSubmit} className='form'>
-                    <div className="inputDiv">
-                </div>
 
                     <div className="inputDiv">
                         <label htmlFor="IC">IC:</label>
@@ -159,7 +221,7 @@ function Register() {
                                 value={ic}
                                 required
                                 onChange={(e) => setUserIc(e.target.value)}
-                                disabled={isLoading}
+                                disabled={isLoading || countdown}
                             />
                         </div>
                     </div>
@@ -176,13 +238,22 @@ function Register() {
                                 value={password}
                                 required
                                 onChange={(e) => setPassword(e.target.value)}
-                                disabled={isLoading}
+                                disabled={isLoading || countdown}
                             />
-                            <div onClick={() => !isLoading && setPasswordVisible(!passwordVisible)}>
+                            <div onClick={togglePasswordVisibility} style={{ cursor: (isLoading || countdown) ? 'not-allowed' : 'pointer' }}>
                                 {passwordVisible ? <MdVisibility id="password-visible" /> : <AiFillEyeInvisible id="password-visible" />}
                             </div>
-
-                            <p id="message" ref={passwordMessageRef}>Password is <span id="strength" ref={passwordStrengthRef}></span></p>
+                        </div>
+                        <div className="passwordFeedback">
+                            <div className="passwordStrengthBar">
+                                <div className="passwordStrengthFill" ref={passwordProgressRef}></div>
+                            </div>
+                            <p className="passwordMessage" ref={passwordMessageRef}>
+                                Password is <span className="passwordStrength" ref={passwordStrengthRef}></span>
+                            </p>
+                            <p className='passwordRequirements'>
+                                Use at least 8 characters, including uppercase, lowercase, a number, and a symbol.
+                            </p>
                         </div>
                     </div>
 
@@ -198,28 +269,69 @@ function Register() {
                                 value={confirmPassword}
                                 required
                                 onChange={(e) => setConfirmPassword(e.target.value)}
-                                disabled={isLoading}
+                                disabled={isLoading || countdown}
                             />
-                            <div onClick={() => !isLoading && setConfirmPasswordVisible(!confirmPasswordVisible)}>
+                            <div onClick={toggleConfirmPasswordVisibility} style={{ cursor: (isLoading || countdown) ? 'not-allowed' : 'pointer' }}>
                                 {confirmPasswordVisible ? <MdVisibility id="password-visible" /> : <AiFillEyeInvisible id="password-visible" />}
                             </div>
-
-                            <p id="message" ref={confirmPasswordMessageRef}>Password is <span id="strength" ref={confirmPasswordStrengthRef}></span></p>
+                        </div>
+                        <div className="passwordFeedback">
+                            <div className="passwordStrengthBar">
+                                <div className="passwordStrengthFill" ref={confirmPasswordProgressRef}></div>
+                            </div>
+                            <p className="passwordMessage" ref={confirmPasswordMessageRef}>
+                                Password is <span className="passwordStrength" ref={confirmPasswordStrengthRef}></span>
+                            </p>
                         </div>
                     </div>
 
-                    <div className="status">
-                        <p>{registerStatus}</p>
-                    </div>
+                    {registerStatus && (
+                        <div className={`status ${registerStatus.includes('successful') ? 'success' : 'error'}`}>
+                            {registerStatus}
+                            {countdown && (
+                                <div style={{ 
+                                    marginTop: '10px', 
+                                    fontSize: '14px', 
+                                    fontWeight: 'bold',
+                                    color: '#ff6b6b'
+                                }}>
+                                    Time remaining: {formatTime(countdown)}
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <div className="button">
-                        <button type="submit" className='btn' disabled={isLoading}>
-                            <span>{isLoading ? 'Registering...' : 'Sign Up'}</span>
+                        <button 
+                            type="submit" 
+                            className='btn' 
+                            disabled={isLoading || countdown}
+                        >
+                            <span>
+                                {isLoading ? 'Registering...' : 
+                                 countdown ? `Please wait (${formatTime(countdown)})` : 
+                                 'Sign Up'}
+                            </span>
                         </button>
                     </div>
 
                     <div className="footer">
                         <p>Already have an account? <Link to="/login">Login</Link></p>
+                    </div>
+
+                    {/* Rate Limit Information */}
+                    <div style={{ 
+                        marginTop: '1rem', 
+                        padding: '0.5rem', 
+                        backgroundColor: '#f8f9fa', 
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        color: '#6c757d',
+                        textAlign: 'center'
+                    }}>
+                        <strong>Registration Limits:</strong><br />
+                        • Maximum 3 registrations per hour per IP address<br />
+                        • Accounts are checked for duplicates automatically
                     </div>
                 </form>
             </div>

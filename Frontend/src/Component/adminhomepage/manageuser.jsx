@@ -47,6 +47,7 @@ function ManageUsers() {
         }
     };
 
+
     const editUser = (userId) => {
         setEditingUserId(Number(userId));
         const user = users.find(user => user.id === Number(userId));
@@ -74,7 +75,8 @@ function ManageUsers() {
             console.log("Save function called for user ID:", userToSave);
             console.log("Edit data to save:", editData);
     
-            const response = await axios.put(`http://localhost:8081/users/${userToSave}`, editData);
+            // SECURITY: Send credentials (auth cookie) with update request
+            const response = await axios.put(`http://localhost:8081/users/${userToSave}`, editData, { withCredentials: true });
     
             if (response.status === 200) {
                 const updatedUser = response.data;
@@ -92,6 +94,10 @@ function ManageUsers() {
             }
         } catch (error) {
             console.error("Error saving user:", error);
+            if (error.response && (error.response.status === 401 || error.response.status === 403)) {
+                alert('Authentication required. Please log in again.');
+                navigate('/login');
+            }
         }
     };
     

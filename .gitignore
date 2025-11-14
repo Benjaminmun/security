@@ -1,1 +1,7 @@
 Frontend/src/footer.jsx
+*.backup
+Backend/logs/
+node_modules/
+**/node_modules/
+package-lock.json
+**/package-lock.json

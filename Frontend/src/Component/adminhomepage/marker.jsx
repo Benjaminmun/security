@@ -1,47 +1,71 @@
-import React, { useState } from 'react';
-import { Marker, InfoWindow } from '@react-google-maps/api';
+/**
+ * Marker Component - OpenStreetMap Implementation
+ * 
+ * SECURITY MIGRATION: Replaced Google Maps Marker with Leaflet Marker
+ * - Custom colored markers for different statuses
+ * - Compatible with react-leaflet
+ * 
+ * Note: This component may be deprecated as markers are now created
+ * directly in adminhompage.jsx. Kept for backward compatibility.
+ */
 
+import React, { useState } from 'react';
+import { Marker, Popup } from 'react-leaflet';
+import L from 'leaflet';
 
 function MarkerComponent({ user }) {
-    const [isOpen, setIsOpen] = useState(false);
-
-    // Function to determine marker color based on user status
-    const getMarkerColor = (status) => {
-        var status = status.toLowerCase();
+    /**
+     * SECURITY UPDATE: Custom marker icons for OpenStreetMap
+     * Creates colored circular markers based on user status
+     */
+    const getMarkerIcon = (status) => {
+        const colorMap = {
+            green: '#00ff00',
+            yellow: '#ffff00',
+            red: '#ff0000',
+            pending: '#0000ff'
+        };
         
-        switch (status) {
-            case 'green':
-                return 'http://maps.google.com/mapfiles/ms/icons/green-dot.png';
-            case 'yellow':
-                return 'http://maps.google.com/mapfiles/ms/icons/yellow-dot.png';
-            case 'red':
-                return 'http://maps.google.com/mapfiles/ms/icons/red-dot.png';
-            default:
-                return 'http://maps.google.com/mapfiles/ms/icons/blue-dot.png';
-        }
+        const color = colorMap[status.toLowerCase()] || '#0000ff';
+        
+        return L.divIcon({
+            className: 'custom-marker',
+            html: `<div style="
+                background-color: ${color};
+                width: 30px;
+                height: 30px;
+                border-radius: 50%;
+                border: 3px solid white;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.3);
+            "></div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
     };
+
+    const lat = parseFloat(user.selected_latitude);
+    const lng = parseFloat(user.selected_longitude);
+
+    if (isNaN(lat) || isNaN(lng)) {
+        console.warn(`Invalid coordinates for user ID ${user.id}`);
+        return null;
+    }
 
     return (
         <Marker
-            position={{
-                lat: parseFloat(user.selected_latitude),
-                lng: parseFloat(user.selected_longitude),
-            }}
-            icon={getMarkerColor(user.status)}
-            onClick={() => setIsOpen(true)}
-            title={`User ID: ${user.id}`} // Corrected template literal
+            position={[lat, lng]}
+            icon={getMarkerIcon(user.status)}
         >
-            {isOpen && (
-                <InfoWindow onCloseClick={() => setIsOpen(false)}>
-                    <div style={{ maxWidth: '200px', fontSize: '14px', color: '#333' }}>
-                        <h3 style={{ fontSize: '16px', margin: '0 0 5px' }}>User ID: {user.id}</h3>
-                        <p>Status: {user.status}</p>
-                        <p>Address: {user.selected_address}</p>
-                        <p>Lat: {user.selected_latitude}</p>
-                        <p>Lng: {user.selected_longitude}</p>
-                    </div>
-                </InfoWindow>
-            )}
+            <Popup>
+                <div style={{ maxWidth: '200px', fontSize: '14px', color: '#333' }}>
+                    <h3 style={{ fontSize: '16px', margin: '0 0 5px' }}>User ID: {user.id}</h3>
+                    <p><strong>IC:</strong> {user.ic}</p>
+                    <p><strong>Status:</strong> {user.status}</p>
+                    <p><strong>Address:</strong> {user.selected_address}</p>
+                    <p><strong>Lat:</strong> {user.selected_latitude}</p>
+                    <p><strong>Lng:</strong> {user.selected_longitude}</p>
+                </div>
+            </Popup>
         </Marker>
     );
 }
