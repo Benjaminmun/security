@@ -17,6 +17,7 @@ function Register() {
     const [confirmPassword, setConfirmPassword] = useState('');
     const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
     const [registerStatus, setRegisterStatus] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
 
     // Password and Confirm Password refs for validation
     const passwordRef = useRef(null);
@@ -71,19 +72,23 @@ function Register() {
 
     const handleSubmit = async (event) => {
         event.preventDefault();
+        setIsLoading(true);
 
         if (!arePasswordsMatching(password, confirmPassword)) {
             setRegisterStatus('Passwords do not match.');
+            setIsLoading(false);
             return;
         }
 
         if (!isPasswordValid(password)) {
             setRegisterStatus('Password must be at least 6 characters.');
+            setIsLoading(false);
             return;
         }
 
         if (!isValidIC(ic)) {
             setRegisterStatus('Invalid IC format. Please use XXXXXX-XX-XXXX format.');
+            setIsLoading(false);
             return;
         }
 
@@ -95,12 +100,19 @@ function Register() {
 
             if (response.message === existUsername || response.message === existIC) {
                 setRegisterStatus('An account already exists!');
+                setIsLoading(false);
                 return;
             } else {
                 window.confirm('Sign Up Successful');
             }
         } catch (error) {
-            setRegisterStatus('Error checking account existence: ', error);
+            // Handle rate limiting errors
+            if (error.status === 429) {
+                setRegisterStatus('Too many registration attempts. Please try again later.');
+            } else {
+                setRegisterStatus('Error checking account existence: ' + error.message);
+            }
+            setIsLoading(false);
             return;
         }
 
@@ -113,9 +125,17 @@ function Register() {
                 }, 2000);
             }
         } catch (error) {
-            setRegisterStatus('Registration failed. Please try again.');
+            // Handle rate limiting errors
+            if (error.status === 429) {
+                setRegisterStatus('Too many registration attempts. Please try again later.');
+            } else {
+                setRegisterStatus('Registration failed. Please try again.');
+            }
+            setIsLoading(false);
             return;
         }
+        
+        setIsLoading(false);
     };
 
     return (
@@ -139,6 +159,7 @@ function Register() {
                                 value={ic}
                                 required
                                 onChange={(e) => setUserIc(e.target.value)}
+                                disabled={isLoading}
                             />
                         </div>
                     </div>
@@ -155,8 +176,9 @@ function Register() {
                                 value={password}
                                 required
                                 onChange={(e) => setPassword(e.target.value)}
+                                disabled={isLoading}
                             />
-                            <div onClick={() => setPasswordVisible(!passwordVisible)}>
+                            <div onClick={() => !isLoading && setPasswordVisible(!passwordVisible)}>
                                 {passwordVisible ? <MdVisibility id="password-visible" /> : <AiFillEyeInvisible id="password-visible" />}
                             </div>
 
@@ -176,8 +198,9 @@ function Register() {
                                 value={confirmPassword}
                                 required
                                 onChange={(e) => setConfirmPassword(e.target.value)}
+                                disabled={isLoading}
                             />
-                            <div onClick={() => setConfirmPasswordVisible(!confirmPasswordVisible)}>
+                            <div onClick={() => !isLoading && setConfirmPasswordVisible(!confirmPasswordVisible)}>
                                 {confirmPasswordVisible ? <MdVisibility id="password-visible" /> : <AiFillEyeInvisible id="password-visible" />}
                             </div>
 
@@ -190,8 +213,8 @@ function Register() {
                     </div>
 
                     <div className="button">
-                        <button type="submit" className='btn'>
-                            <span>Sign Up</span>
+                        <button type="submit" className='btn' disabled={isLoading}>
+                            <span>{isLoading ? 'Registering...' : 'Sign Up'}</span>
                         </button>
                     </div>
 

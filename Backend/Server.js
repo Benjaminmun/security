@@ -1,24 +1,25 @@
-
 import express from 'express';
 import mysql from 'mysql';
 import cors from 'cors';
-import bcrypt from 'bcrypt';//hash password
-import multer from 'multer'//handle multiple form content
-import cookieParser from 'cookie-parser';//httpOnly cookie
+import bcrypt from 'bcrypt'; // hash password
+import multer from 'multer'; // handle multiple form content
+import cookieParser from 'cookie-parser'; // httpOnly cookie
 import axios from 'axios';
 import querystring from 'querystring';
 import bodyParser from 'body-parser';
 import FormData from 'form-data';
 
-//.env
+// .env
 import dotenv from 'dotenv';
 dotenv.config();
 
-//login 
+// login 
 import jwt from 'jsonwebtoken'; // import json web token
 
-const app = express();
+// Rate limiting
+import rateLimit from 'express-rate-limit';
 
+const app = express();
 
 // Use cookie-parser middleware
 app.use(cookieParser());
@@ -42,6 +43,46 @@ const db = mysql.createConnection({
     database: "dbkl_project",
 });
 
+///////////////////////////////////////////////////////////////////////// Rate Limiting Configuration //////////////////////////////////////////////////
+
+// Login rate limiter - prevents brute force attacks
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 5, // Limit each IP to 5 login requests per windowMs
+  message: {
+    error: "Too many login attempts from this IP, please try again after 15 minutes."
+  },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+// Registration rate limiter - prevents mass account creation
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 3, // Limit each IP to 3 registration requests per hour
+  message: {
+    error: "Too many accounts created from this IP, please try again after an hour."
+  }
+});
+
+// General API rate limiter - protects against DoS attacks
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+  message: {
+    error: "Too many requests from this IP, please try again later."
+  }
+});
+
+// Strict rate limiter for sensitive endpoints
+const strictLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 requests per windowMs
+  message: {
+    error: "Too many requests to this endpoint, please try again later."
+  }
+});
+
 /////////////////////////////////////////////////////////////////////////middleware to verify token//////////////////////////////////////////////////
 const verifyToken = (req, res, next) => {
   const token = req.cookies.token; // Access token from cookies
@@ -62,11 +103,8 @@ const verifyToken = (req, res, next) => {
   });
 };
 
-
 const storage = multer.memoryStorage(); // Use memory storage for simplicity
 const upload = multer({ storage: storage });
-
-
 
 /////////////////////////////////////////////////////////////////////// DB connection is established///////////////////////////////////////////////
 db.connect(err => {
@@ -77,20 +115,17 @@ db.connect(err => {
     console.log('Connected to the database');
 }); 
 
-
-
 /////////////////////////////////////////////////////////// Endpoint to handle GET request//////////////////////////////////////////////////////////
 app.get('/', (req, res) => {
     return res.json("From Backend Side!");
 });
 
-
-
-
+// Apply general API rate limiting to all routes
+app.use(apiLimiter);
 
 //async for using try catch function
 ///////////////////////////////////////////////////////////////////////////// Login route/////////////////////////////////////////////////////////////
-app.post('/Login', async (req, res) => {
+app.post('/Login', loginLimiter, async (req, res) => {
     const { email, password, ic, userType } = req.body;
     console.log("Request Received Login", req.body);
 
@@ -170,13 +205,8 @@ app.post('/Login', async (req, res) => {
     }
 });
 
-
-
-
-
-
 ///////////////////////////////////////////////////////////////////// check-account-exist endpoint////////////////////////////////////////////////
-app.post('/check-account-exist', (req, res) => {
+app.post('/check-account-exist', strictLimiter, (req, res) => {
     const { username, email, ic, userType } = req.body;
 
     if(userType === "Admin"){
@@ -223,13 +253,8 @@ app.post('/check-account-exist', (req, res) => {
     }
 });
 
-
-
-
-
-
 /////////////////////////////////////////////////////////////////////////////// Register endpoint///////////////////////////////////////////////////
-app.post('/register', async (req, res) => {
+app.post('/register', registerLimiter, async (req, res) => {
     console.log('Received request:', req.body);  // Log the request body
     const { username, email, password, ic, userType} = req.body;
 
@@ -282,9 +307,8 @@ app.post('/register', async (req, res) => {
     }
 });
 
-
 /////////////////////////////////////////////////////////////logout//////////////////////////////////////////////////
-app.post('/logout',(req, res) =>{
+app.post('/logout', (req, res) =>{
     // Clear the JWT cookie by setting it to an expired date
     console.log(req.body);
     
@@ -324,7 +348,7 @@ const uploadToImgBB = async (imageBase64) => {
 };
 
 ///////////////////////////////////////////////////////////// update upload attempt status/////////////////////////////////////////////////////////
-app.post('/updateUploadAttempt', verifyToken, (req, res) => {
+app.post('/updateUploadAttempt', verifyToken, strictLimiter, (req, res) => {
     const userId = req.user.id;
     const uploadAttemptId = req.body.uploadAttemptId;
     // Assume you have a database connection here
@@ -360,12 +384,8 @@ app.get('/getUploadAttempts', verifyToken, (req, res) => {
     });
 });
 
-
-
-
-
 /////////////////////////////////////////////////// Photo Upload Endpoint///////////////////////////////////////////////
-app.post('/uploadImage', upload.single('file'), verifyToken, (req, res) => {
+app.post('/uploadImage', upload.single('file'), verifyToken, strictLimiter, (req, res) => {
     console.log("File Upload Request:", req.file);
     const userId = req.user.id; // Retrieve userId from the decoded token
 
@@ -403,11 +423,8 @@ app.post('/uploadImage', upload.single('file'), verifyToken, (req, res) => {
     });
 });
 
-
-
-
 /////////////////////////////////////////////////////////// Compare Faces Endpoint//////////////////////////////////////
-app.post('/compareFaces', verifyToken, async (req, res) => {
+app.post('/compareFaces', verifyToken, strictLimiter, async (req, res) => {
     console.log('User object:', req.user);
     const { capturedImage } = req.body;
     const userId = req.user.id;
@@ -520,11 +537,8 @@ app.post('/compareFaces', verifyToken, async (req, res) => {
     });
 });
 
-
-
-
 //////////////////////////////////////////////Save Location/////////////////////////////////////////////////////////
-app.post('/saveLocation', verifyToken, async (req, res) => {
+app.post('/saveLocation', verifyToken, strictLimiter, async (req, res) => {
     const { capturedLatitude, capturedLongitude, selectedLatitude, selectedLongitude, selectedAddress } = req.body;
     const userId = req.user.id;
 
@@ -556,7 +570,7 @@ app.post('/saveLocation', verifyToken, async (req, res) => {
 });
 
 ///////////////////////////////////////////////////////////////////////Endpoint to save status in the users table///////////////////////////////////
-app.post('/saveStatus', verifyToken, async (req, res) => {
+app.post('/saveStatus', verifyToken, strictLimiter, async (req, res) => {
     const { status } = req.body;
     const userId = req.user.id;  // userId is obtained from the token
 
@@ -581,10 +595,8 @@ app.post('/saveStatus', verifyToken, async (req, res) => {
     }
 });
 
-
-
 ///////////////////////////////////////////////////// Endpoint to save reason in the users table////////////////////////////////
-app.post('/saveReason', verifyToken, async (req, res) => {
+app.post('/saveReason', verifyToken, strictLimiter, async (req, res) => {
     const { reason } = req.body;
     const userId = req.user.id;  // userId is obtained from the token
 
@@ -608,14 +620,10 @@ app.post('/saveReason', verifyToken, async (req, res) => {
         res.status(500).json({ message: 'Error updating reason' });
     }
 });
-
-
-
     
 /////////////////////////////////////RETRIVE USERS DATABASE INTO ADMIN//////////////////////////////////
-
 // Define a route to fetch data (example: fetching all users)
-app.get('/users', (req, res) => {
+app.get('/users', verifyToken, (req, res) => {
     const query = 'SELECT * FROM users';
     db.query(query, (error, results) => {
         if (error) {
@@ -628,9 +636,8 @@ app.get('/users', (req, res) => {
     });
 });
 
-
 //////////////////////////////////////////////////////////////////Delete user route////////////////////////////////////////////////////////////
-app.delete('/users/:id', (req, res) => {
+app.delete('/users/:id', verifyToken, strictLimiter, (req, res) => {
     const userId = req.params.id;
     const deleteQuery = 'DELETE FROM users WHERE id = ?';
 
@@ -648,12 +655,8 @@ app.delete('/users/:id', (req, res) => {
     });
 });
 
-
-
-
-
 ////////////////////////////////////////////////////////////Edit users information////////////////////////////////////
-app.put('/users/:userId', (req, res) => {
+app.put('/users/:userId', verifyToken, strictLimiter, (req, res) => {
     const userId = req.params.userId;
     const { ic, status, reason, selected_address, selected_latitude, selected_longitude } = req.body;
 
@@ -680,7 +683,6 @@ app.put('/users/:userId', (req, res) => {
         }
     );
 });
-
 
 // Start the server
 const PORT = 8081;
