@@ -1,0 +1,325 @@
+*{    
+    padding: 0;
+    margin: 0;
+    border: 0;
+    text-decoration: none;
+}
+
+body{
+    background-image: url(https://images3.alphacoders.com/102/1021879.jpg);   
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    overflow-y: auto;
+    font-family: sans-serif;
+}
+
+.uploadIdentityDialog{
+    position: fixed;
+    top: 50%; 
+    left: 50%; 
+    transform: translate(-50%, -50%); 
+    border: 2px solid rgba(0, 0, 0, .5); 
+    border-radius: 30px;
+    box-shadow: inset 1px #3498db;
+    width: 100%;
+    max-width: 550px; 
+    max-height: 100%; 
+    overflow: hidden;
+    padding: 20px; 
+    background: none;
+    padding: 0;
+}
+
+.uploadIdentityDialog::backdrop{
+    background-color: rgba(0, 0, 0, .6);
+    backdrop-filter: blur(5px);
+}
+
+/* upload identity */
+.file_upload_container{
+    background-color: whitesmoke;
+    padding: 40px 30px;
+    border-radius: 31px;
+    color: white;
+    box-shadow: 0 0 20px 0 rgb(112 121 138 / 18%);
+    margin-top: 40px;
+    max-width: 550px;
+    margin: 0;
+}
+
+.file_upload_container >.top >.close{
+    position: absolute;
+    top: 35px;
+    right: 10px;
+    background-color: red;
+    border-radius: 20px;
+    padding: 10px;
+    width: 80px;
+    color: #fff;
+    margin-right: 20px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+/* top */
+.file_upload_container > .top{
+    padding: 5px 0;
+}
+
+/* middle */
+.file_upload_container > .middle{
+    padding-top: 30px;
+}
+
+.file_upload_container > .middle > .file_drop_area{
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    background: white;
+    border: dashed 3px #3498db;
+    border-radius: 21px;
+    padding: 40px 20px;
+    text-align: center;
+    cursor: pointer;
+    transition: .4s;
+}
+
+.file_upload_container > .middle > .file_drop_area:hover{
+    background: rgba(49, 125, 212, 0.497);
+    border-color: #3498db;
+}
+
+.file_upload_container > .middle > .file_drop_area > .icon{
+    font-size: 35px;    
+    color: black
+}
+
+.file_upload_container > .middle > .file_drop_area > input{
+    width: 0;
+    height: 0; 
+    visibility: hidden;
+    /* position: absolute; */
+    /* z-index: 10; */
+} 
+
+.file_upload_container > .middle > .preview_area{
+    margin: 15px 0;
+    max-height: 200px;
+    overflow: hidden;
+    overflow-y: auto;
+}
+.file_upload_container > .middle > .preview_area > .preview_card{
+    background: #0cacf7;
+    border: solid 1px #5a5a5a;
+    padding: 20px 20px;
+    border-radius: 15px;
+    margin: 3px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.column{
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+}
+
+.file_upload_container > .middle > .preview_area > 
+.preview_card > .column_avater{
+    width: 60px;
+    height: 60px;
+    max-width: 60px;
+    max-height: 60px;
+    min-width: 60px;
+    min-height: 60px;
+    background: #282427;
+    display: felx;
+    align-items: center;
+    justify-content: center;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.file_upload_container > .middle > .preview_area > 
+.preview_card > .column_avater >.column_last{
+    margin-left: auto;
+}
+
+.text_muted_size{
+    color: #000;
+}
+
+.cancel_icon{
+    color: red;
+    font-size: 35px;
+    font-weight: 900;
+    cursor: pointer;
+}
+
+.title{
+    color: black;
+    font-weight: 600;
+}
+
+.name{
+    word-break: break-all;
+    color: #000;
+}
+
+.description{
+    color: #000;
+}
+
+.remaining_attempts{
+    color: rgb(255, 0, 0)
+}
+
+.text_muted{
+    color: #000;
+}
+
+
+
+.color_primary{
+    color: #3498db;
+}
+/* bottom */
+.file_upload_container >.bottom{
+    display: flex;
+    gap: 20px;
+    justify-content: space-between;
+}
+
+p{
+    font-size: 15px;
+}
+
+h3{
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.file_upload_container > .middle > .preview_area > 
+.preview_card img {
+    width: 100%;
+    max-height: 100%;
+    object-fit: cover;
+    background-color: transparent;
+}
+
+#btn{
+    background: red;
+    padding: 15px 20px;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 8px;
+    cursor: pointer;
+    display: block;
+    width: 53%;
+}
+
+#btn:hover{
+    background-color: rgba(255, 0, 0, .5);
+    color: rgba(0, 0, 0, .5);
+    font-weight: 700;
+    transition: ease-in-out .3s
+}
+
+.btn_primary{
+    background-color: #3498db;
+    padding: 15px 20px;
+    color: white;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 53px;
+    display: block;
+    width: 100%;
+    cursor: pointer;
+}
+
+.btn_primary:hover{
+    background-color: rgba(52, 152, 219, .5);
+    color:rgba(0, 0, 0, .5);
+    font-weight: 500;
+    transition: ease-in-out .3s
+}
+.btn_primary:disabled {
+    background-color: #ccc; /* Gray or any other color you prefer */
+    color: #666; /* Darker text color for contrast */
+    cursor: not-allowed; /* Shows that the button is disabled */
+    opacity: 0.6; /* Optional: make it slightly transparent */
+}
+
+/* Center container */
+.center_container{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 50%; 
+    left: 50%; 
+    transform: translate(-50%, -50%); 
+    height: 500px; /* Centers vertically */
+    gap: 20px;
+    border-radius: 8px;
+    width: 500px;
+    border: 3px groove rgba(128, 128, 128, 0.311) ;
+    background-color: #fff;
+    backdrop-filter: blur(10px);
+    box-shadow: inset 1px 1px 6px rgba(255, 255, 255, .3), 2px 2px 15px rgba(0, 0, 0, .5);
+}
+
+/* Button styling */
+.center_container button {
+    padding: 20px 40px; /* Increase size */
+    font-size: 18px;
+    border-radius: 8px;
+
+    cursor: pointer;
+    background-color: #007bff;
+    color: white;
+    text-align: center;
+    width: 250px; /* Fixed width for consistency */
+}
+
+.main_btn{
+    box-shadow: 0px 0px 10px #3498db;
+}
+
+.main_btn:hover {
+    background-color: rgba(52, 152, 219, .5);
+    color:rgba(0, 0, 0, .5);
+    font-weight: 500;
+    transition: ease-in-out .3s
+}
+
+/* Link inside buttons */
+.center_container button a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.uploadedImageContainer {
+    text-align: center;
+    margin: 20px 0;
+}
+
+.uploadedImage {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 10px;
+    margin-top: 10px;
+}
+
+.actionButtons {
+    display: flex;
+    flex-direction: column; /* Stack buttons vertically */
+    align-items: center; /* Center align buttons */
+    gap: 10px; /* Space between buttons */
+}

@@ -1,0 +1,267 @@
+:root {
+    --primary-color: #007bff;
+    --primary-hover-color: #0056b3;
+    --secondary-color: #ff5c5c;
+    --secondary-hover-color: #e04848;
+    --background-overlay: rgba(244, 247, 250, 0.8);
+    --box-shadow-color: rgba(0, 0, 0, 0.1);
+    --text-dark: #333;
+    --text-light: #fff;
+    --font-size-base: 1rem;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html {
+    font-size: 16px;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    line-height: 1.5;
+}
+
+.container {
+    background-image: url('https://images3.alphacoders.com/102/1021879.jpg');
+    background-size: cover;
+    background-position: center;
+    padding: 1.25rem;
+    background-color: var(--background-overlay); /* Semi-transparent overlay */
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.header {
+    width: 100%;
+    max-width: 1800px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+}
+
+.header h1 {
+
+    font-size: 2.25rem;
+    color: var(--text-light);
+    margin: 0.625rem 0;
+    text-align: center;
+}
+
+.button {
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    padding: 0.625rem 1.25rem;
+    border: none;
+    border-radius: 0.3125rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+    margin: 0.3125rem 0;
+}
+
+.button:hover {
+    background-color: var(--primary-hover-color);
+}
+
+.logoutButton {
+    background-color: var(--secondary-color);
+}
+
+.logoutButton:hover {
+    background-color: var(--secondary-hover-color);
+}
+
+.main {
+    width: 100%;
+    max-width: 1800px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+    align-items: center;
+    padding: 0 0.625rem;
+}
+
+.card {
+    width: 100%;
+    background-color: var(--text-light);
+    padding: 1.25rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 0.25rem 0.75rem var(--box-shadow-color);
+    overflow: hidden;
+}
+
+.card h2 {
+    margin-bottom: 1.25rem;
+    color: var(--text-dark);
+    text-align: center;
+}
+
+/* Table Styles */
+.tableContainer {
+    width: 100%;
+    overflow-x: auto; /* Enables horizontal scrolling on small devices */
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 20px;
+}
+
+.userTable {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 700px;
+    table-layout: auto;
+}
+
+.userTable th,
+.userTable td {
+    padding: 12px 15px;
+    border: 1px solid #ddd;
+    text-align: left;
+    vertical-align: middle;
+    font-size: 14px;
+    white-space: nowrap;
+}
+
+.userTable th {
+    background-color: whitesmoke;
+    color: black;
+    font-weight: bold;
+}
+
+.userImage {
+    width: 100%;
+    max-width: 5rem;
+    height: auto;
+    border-radius: 1.125rem;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+}
+
+.userImage:hover {
+    transform: scale(1.05);
+}
+
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+    margin-top: 1.25rem;
+}
+
+.actionButton {
+    flex: 1 1 calc(33.333% - 0.625rem);
+    background-color: var(--primary-color);
+    color: var(--text-light);
+    padding: 0.9375rem;
+    border-radius: 0.5rem;
+    text-align: center;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    box-shadow: 0 0.625rem 0.625rem rgba(52, 152, 219, 0.5);
+}
+
+.actionButton:hover {
+    background-color: rgba(52, 152, 219, 0.7);
+    transform: translateY(-0.125rem);
+}
+
+/* Responsive Adjustments */
+@media (max-width: 1024px) {
+    .header h1 {
+        font-size: 2rem;
+    }
+
+    .button {
+        padding: 0.625rem 1.25rem;
+        font-size: 0.9375rem;
+    }
+
+    .userTable th,
+    .userTable td {
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+
+    .actionButton {
+        padding: 0.75rem;
+        font-size: 0.875rem;
+    }
+}
+
+@media (max-width: 768px) {
+    .header {
+        flex-direction: column;
+        text-align: center;
+        color: #fff
+    }
+
+    .header h1 {
+        font-size: 1.75rem;
+    }
+
+    .button {
+        width: 100%;
+        font-size: 0.875rem;
+    }
+
+    .actions {
+        flex-direction: column;
+    }
+
+    .actionButton {
+        flex: 1 1 100%;
+        padding: 0.75rem;
+    }
+
+    .userImage {
+        max-width: 4rem;
+    }
+
+    .userTable th,
+    .userTable td {
+        padding: 8px 10px;
+        font-size: 12px;
+    }
+}
+
+@media (max-width: 480px) {
+    .header h1 {
+        font-size: 1.5rem;
+    }
+
+    .button {
+        padding: 0.5rem 0.75rem;
+        font-size: 0.75rem;
+    }
+
+    .actionButton {
+        padding: 0.625rem;
+        font-size: 0.75rem;
+    }
+
+    .userImage {
+        max-width: 3.125rem;
+    }
+
+    .userTable th,
+    .userTable td {
+        font-size: 11px;
+        padding: 6px 8px;
+    }
+}
+
+.deleteButton {
+    background-color: #dc3545;
+}
+
+.deleteButton:hover {
+    background-color: #b32a36;
+}
