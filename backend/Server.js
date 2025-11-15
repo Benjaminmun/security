@@ -21,10 +21,10 @@ const app = express();
 
 import rateLimit from "express-rate-limit";
 
-// Global rate limit — adjust as needed
+// Global rate limiter middleware
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,                 // limit each IP to 100 requests per 15 mins
+  max: 40,                 // limit each IP to 40 requests per 15 mins
   standardHeaders: true,    // return rate limit info in headers
   legacyHeaders: false
 });
