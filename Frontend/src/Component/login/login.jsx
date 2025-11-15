@@ -75,14 +75,7 @@ function LoginPage() {
         setCountdown(null);
 
         // Check if the credentials match the default admin account
-        if (userType === 'Admin' && email === defaultAdmin.email && password === defaultAdmin.password) {
-            setTimeout(() => {
-                setIsLoading(false);
-                window.confirm('Login successful as Admin');
-                window.location.href = '/adminhomepage';
-            }, 1000);
-            return;
-        }
+
 
         try {
             // If not using default credentials, proceed with database check

@@ -19,7 +19,7 @@ function ManageUsers() {
     useEffect(() => {
         const fetchUsers = async () => {
             try {
-                const response = await axios.get('http://localhost:8081/users');
+                const response = await axios.get('http://localhost:8081/users', {withCredentials: true});
                 if (response.status === 200) {
                     // Convert user IDs to numbers
                     const usersWithNumericIds = response.data.map(user => ({
@@ -38,7 +38,7 @@ function ManageUsers() {
 
     const deleteUser = async () => {
         try {
-            await axios.delete(`http://localhost:8081/users/${userToDelete}`);
+            await axios.delete(`http://localhost:8081/users/${userToDelete}`, {withCredentials: true});
             setUsers(users.filter(user => user.id !== userToDelete));
             setShowModal(false);
             setUserToDelete(null);
