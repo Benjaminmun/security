@@ -7,6 +7,8 @@ import Camera from './Component/Camera/Camera';
 import AdminHomepage from './Component/adminhomepage/adminhompage';
 import ManageUsers from './Component/adminhomepage/manageuser';
 import CompletePage from './Component/Camera/CompletePage';
+import { startActivityWatcher, setIdleWarningCallback } from "./utils/activityWatcher";
+import { useEffect, useState } from "react";
 
 const router = createBrowserRouter([
     { 
@@ -44,11 +46,37 @@ const router = createBrowserRouter([
 ]);
 
 function App() {
+    const [idleMessage, setIdleMessage] = useState("");
+
+    useEffect(() => {
+        startActivityWatcher();
+
+        setIdleWarningCallback((msg) => {
+            setIdleMessage(msg);
+        });
+    }, []);
+
     return (
         <div>
-            <RouterProvider router={router}/>
-        </div>  
+            {idleMessage && (
+                <div style={{ 
+                    background: "orange", 
+                    padding: "10px", 
+                    color: "white",
+                    position: "fixed",
+                    top: 0,
+                    width: "100%",
+                    textAlign: "center",
+                    zIndex: 9999
+                }}>
+                    {idleMessage}
+                </div>
+            )}
+
+            <RouterProvider router={router} />
+        </div>
     );
 }
+
 
 export default App;

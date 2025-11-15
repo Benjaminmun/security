@@ -4,6 +4,7 @@ import axios from 'axios';
 
 // route
 import { Link } from 'react-router-dom';
+import { startActivityWatcher } from "../../utils/activityWatcher"; 
 
 // icons
 import { FaUserShield } from "react-icons/fa";
@@ -95,6 +96,7 @@ function LoginPage() {
             });
 
             if (response.status === 200) {
+                startActivityWatcher();
                 setTimeout(() => {
                     setIsLoading(false);
                     window.confirm('Login successful');
