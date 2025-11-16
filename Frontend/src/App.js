@@ -7,6 +7,9 @@ import Camera from './Component/Camera/Camera';
 import AdminHomepage from './Component/adminhomepage/adminhompage';
 import ManageUsers from './Component/adminhomepage/manageuser';
 import CompletePage from './Component/Camera/CompletePage';
+import ProtectedRoute from './Component/ProtectedRoute';
+import { startActivityWatcher, setIdleWarningCallback } from "./utils/activityWatcher";
+import { useEffect, useState } from "react";
 
 const router = createBrowserRouter([
     { 
@@ -23,32 +26,78 @@ const router = createBrowserRouter([
     },
     {
         path: '/homepage',
-        element: <div><Homepage/></div>
+        element: (
+            <ProtectedRoute requiredRole="users">
+                <div><Homepage/></div>
+            </ProtectedRoute>
+        )
     },
     {
         path: '/camera',
-        element: <div><Camera/></div>
+        element: (
+            <ProtectedRoute requiredRole="users">
+                <div><Camera/></div>
+            </ProtectedRoute>
+        )
     },
     {
         path: '/adminhomepage', 
-        element: <div><AdminHomepage/></div>
+        element: (
+            <ProtectedRoute requiredRole="Admin">
+                <div><AdminHomepage/></div>
+            </ProtectedRoute>
+        )
     },
     {
         path: '/manageuser', 
-        element: <div><ManageUsers/></div>
+        element: (
+            <ProtectedRoute requiredRole="Admin">
+                <div><ManageUsers/></div>
+            </ProtectedRoute>
+        )
     },
     {
         path: '/CompletePage',
-        element: <div><CompletePage /></div>
+        element: (
+            <ProtectedRoute requiredRole="users">
+                <div><CompletePage /></div>
+            </ProtectedRoute>
+        )
     }
 ]);
 
 function App() {
+    const [idleMessage, setIdleMessage] = useState("");
+
+    useEffect(() => {
+        startActivityWatcher();
+
+        setIdleWarningCallback((msg) => {
+            setIdleMessage(msg);
+        });
+    }, []);
+
     return (
         <div>
-            <RouterProvider router={router}/>
-        </div>  
+            {idleMessage && (
+                <div style={{ 
+                    background: "orange", 
+                    padding: "10px", 
+                    color: "white",
+                    position: "fixed",
+                    top: 0,
+                    width: "100%",
+                    textAlign: "center",
+                    zIndex: 9999
+                }}>
+                    {idleMessage}
+                </div>
+            )}
+
+            <RouterProvider router={router} />
+        </div>
     );
 }
+
 
 export default App;

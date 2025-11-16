@@ -38,6 +38,13 @@ export const validateEmail = (email) => {
         return { isValid: false, sanitized: '', error: 'Email too long' };
     }
 
+    // SECURITY: Check for SQL injection patterns FIRST before email validation
+    // This ensures SQL injection attempts are properly identified and logged
+    const sqlInjectionPatterns = /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|SCRIPT)\b|--|;|\/\*|\*\/|xp_|sp_|'|")/gi;
+    if (sqlInjectionPatterns.test(trimmed)) {
+        return { isValid: false, sanitized: '', error: 'Invalid characters detected - SQL injection attempt' };
+    }
+
     // Validate email format using validator library
     if (!validator.isEmail(trimmed)) {
         return { isValid: false, sanitized: '', error: 'Invalid email format' };
@@ -51,12 +58,6 @@ export const validateEmail = (email) => {
         yahoo_remove_subaddress: false,
         icloud_remove_subaddress: false
     });
-
-    // Additional check for SQL injection patterns
-    const sqlInjectionPatterns = /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|SCRIPT)\b|--|;|\/\*|\*\/|xp_|sp_)/gi;
-    if (sqlInjectionPatterns.test(sanitized)) {
-        return { isValid: false, sanitized: '', error: 'Invalid characters detected' };
-    }
 
     return { isValid: true, sanitized, error: null };
 };
@@ -83,10 +84,10 @@ export const validateIC = (ic) => {
         return { isValid: false, sanitized: '', error: 'IC too long' };
     }
 
-    // Check for SQL injection patterns
-    const sqlInjectionPatterns = /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|SCRIPT)\b|--|;|\/\*|\*\/|xp_|sp_|<|>|&)/gi;
+    // SECURITY: Check for SQL injection patterns FIRST
+    const sqlInjectionPatterns = /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|SCRIPT)\b|--|;|\/\*|\*\/|xp_|sp_|<|>|&|'|")/gi;
     if (sqlInjectionPatterns.test(trimmed)) {
-        return { isValid: false, sanitized: '', error: 'Invalid characters in IC' };
+        return { isValid: false, sanitized: '', error: 'Invalid characters in IC - SQL injection attempt' };
     }
 
     // Allow only alphanumeric and hyphens for IC
@@ -126,10 +127,10 @@ export const validateUsername = (username) => {
         return { isValid: false, sanitized: '', error: 'Username too long (max 50 characters)' };
     }
 
-    // Check for SQL injection patterns
-    const sqlInjectionPatterns = /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|SCRIPT)\b|--|;|\/\*|\*\/|xp_|sp_)/gi;
+    // SECURITY: Check for SQL injection patterns FIRST
+    const sqlInjectionPatterns = /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|SCRIPT)\b|--|;|\/\*|\*\/|xp_|sp_|'|")/gi;
     if (sqlInjectionPatterns.test(trimmed)) {
-        return { isValid: false, sanitized: '', error: 'Invalid characters in username' };
+        return { isValid: false, sanitized: '', error: 'Invalid characters in username - SQL injection attempt' };
     }
 
     // Allow only alphanumeric and underscores
@@ -281,10 +282,10 @@ export const validateText = (text, maxLength = 500) => {
         return { isValid: false, sanitized: '', error: `Text too long (max ${maxLength} characters)` };
     }
 
-    // Check for SQL injection patterns
-    const sqlInjectionPatterns = /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|SCRIPT)\b|--|\/\*|\*\/|xp_|sp_)/gi;
+    // SECURITY: Check for SQL injection patterns
+    const sqlInjectionPatterns = /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE|UNION|SCRIPT)\b|--|\/\*|\*\/|xp_|sp_|'|")/gi;
     if (sqlInjectionPatterns.test(trimmed)) {
-        return { isValid: false, sanitized: '', error: 'Invalid characters detected' };
+        return { isValid: false, sanitized: '', error: 'Invalid characters detected - SQL injection attempt' };
     }
 
     // Escape HTML to prevent XSS

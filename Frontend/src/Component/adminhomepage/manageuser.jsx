@@ -19,7 +19,7 @@ function ManageUsers() {
     useEffect(() => {
         const fetchUsers = async () => {
             try {
-                const response = await axios.get('http://localhost:8081/users');
+                const response = await axios.get('http://localhost:8081/users', {withCredentials: true});
                 if (response.status === 200) {
                     // Convert user IDs to numbers
                     const usersWithNumericIds = response.data.map(user => ({
@@ -30,20 +30,43 @@ function ManageUsers() {
                 }
             } catch (error) {
                 console.error("Error fetching users:", error);
+                // SECURITY: Access Control - Show error if user doesn't have permissions
+                if (error.response) {
+                    if (error.response.status === 403) {
+                        setMessage('🛡️ SECURITY: Access denied. Admin privileges required to view users.');
+                        setTimeout(() => navigate('/login'), 2000);
+                    } else if (error.response.status === 401) {
+                        setMessage('🛡️ SECURITY: Authentication required. Please log in.');
+                        setTimeout(() => navigate('/login'), 2000);
+                    }
+                }
             }
         };
         fetchUsers();
-    }, []);
+    }, [navigate]);
     
 
     const deleteUser = async () => {
         try {
-            await axios.delete(`http://localhost:8081/users/${userToDelete}`);
+            await axios.delete(`http://localhost:8081/users/${userToDelete}`, {withCredentials: true});
             setUsers(users.filter(user => user.id !== userToDelete));
             setShowModal(false);
             setUserToDelete(null);
+            setMessage('User deleted successfully.');
         } catch (error) {
             console.error("Error deleting user:", error);
+            // SECURITY: Access Control - Show error if user doesn't have permissions
+            if (error.response) {
+                if (error.response.status === 403) {
+                    setMessage('🛡️ SECURITY: Access denied. Only admins can delete users.');
+                    setShowModal(false);
+                } else if (error.response.status === 401) {
+                    setMessage('🛡️ SECURITY: Authentication required. Please log in again.');
+                    setTimeout(() => navigate('/login'), 2000);
+                } else if (error.response.status === 400) {
+                    setMessage('🛡️ SECURITY: ' + (error.response.data.error || 'Invalid request.'));
+                }
+            }
         }
     };
 
@@ -89,15 +112,32 @@ function ManageUsers() {
                 setEditData({});
                 setShowEditConfirmation(false);
                 setUserToSave(null);
+                setMessage('User updated successfully.');
             } else {
                 // Handle non-200 responses if necessary
             }
         } catch (error) {
             console.error("Error saving user:", error);
-            if (error.response && (error.response.status === 401 || error.response.status === 403)) {
-                alert('Authentication required. Please log in again.');
-                navigate('/login');
+            // SECURITY: Access Control & Input Validation - Show specific error messages
+            if (error.response) {
+                if (error.response.status === 401) {
+                    setMessage('🛡️ SECURITY: Authentication required. Please log in again.');
+                    navigate('/login');
+                } else if (error.response.status === 403) {
+                    setMessage('🛡️ SECURITY: Access denied. Only admins can modify users.');
+                } else if (error.response.status === 400) {
+                    const errorMsg = error.response.data.error || 'Invalid input';
+                    if (errorMsg.includes('Invalid characters') || errorMsg.includes('SQL')) {
+                        setMessage('🛡️ SECURITY: Suspicious input detected and blocked. SQL injection attempt prevented.');
+                    } else if (errorMsg.includes('Latitude') || errorMsg.includes('Longitude')) {
+                        setMessage('🛡️ SECURITY: Invalid coordinates. ' + errorMsg);
+                    } else {
+                        setMessage('🛡️ SECURITY: ' + errorMsg);
+                    }
+                }
             }
+            setShowEditConfirmation(false);
+            setUserToSave(null);
         }
     };
     

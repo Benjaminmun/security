@@ -4,6 +4,7 @@ import axios from 'axios';
 
 // route
 import { Link } from 'react-router-dom';
+import { startActivityWatcher } from "../../utils/activityWatcher"; 
 
 // icons
 import { FaUserShield } from "react-icons/fa";
@@ -74,14 +75,7 @@ function LoginPage() {
         setCountdown(null);
 
         // Check if the credentials match the default admin account
-        if (userType === 'Admin' && email === defaultAdmin.email && password === defaultAdmin.password) {
-            setTimeout(() => {
-                setIsLoading(false);
-                window.confirm('Login successful as Admin');
-                window.location.href = '/adminhomepage';
-            }, 1000);
-            return;
-        }
+
 
         try {
             // If not using default credentials, proceed with database check
@@ -95,6 +89,7 @@ function LoginPage() {
             });
 
             if (response.status === 200) {
+                startActivityWatcher();
                 setTimeout(() => {
                     setIsLoading(false);
                     window.confirm('Login successful');
@@ -133,7 +128,29 @@ function LoginPage() {
                 } else if (status === 401) {
                     setLoginStatus('Invalid credentials. Please check your email/IC and password.');
                 } else if (status === 400) {
-                    setLoginStatus('Invalid input. Please check your information.');
+                    // SECURITY: Input Validation - Show specific error messages
+                    const errorMessage = responseData.message || 'Invalid input. Please check your information.';
+                    
+                    // Check for specific security violations - ORDER MATTERS!
+                    // Check SQL injection FIRST before other validations
+                    if (errorMessage.includes('SQL injection') ||
+                        errorMessage.includes('Invalid characters detected') || 
+                        errorMessage.includes('injection')) {
+                        setLoginStatus('🛡️ SECURITY: Suspicious input detected and blocked. SQL injection attempt prevented.');
+                    } else if (errorMessage.includes('Invalid email format') || 
+                        errorMessage.includes('email')) {
+                        setLoginStatus('🛡️ SECURITY: Invalid email format detected. Please enter a valid email address.');
+                    } else if (errorMessage.includes('Invalid IC') || 
+                               errorMessage.includes('IC format')) {
+                        setLoginStatus('🛡️ SECURITY: Invalid IC format detected. Please use format YYMMDD-PB-###G.');
+                    } else if (errorMessage.includes('user type')) {
+                        setLoginStatus('🛡️ SECURITY: Invalid user type. Please select Admin or User.');
+                    } else {
+                        setLoginStatus('🛡️ SECURITY: ' + errorMessage);
+                    }
+                } else if (status === 403) {
+                    // SECURITY: Access Control - Unauthorized access
+                    setLoginStatus('🛡️ SECURITY: Access denied. Insufficient permissions.');
                 } else {
                     setLoginStatus('Login failed. Please try again.');
                 }

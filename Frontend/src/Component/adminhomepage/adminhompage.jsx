@@ -22,16 +22,22 @@ function AdminHomepage() {
     useEffect(() => {
         const fetchUsers = async () => {
             try {
-                const response = await axios.get('http://localhost:8081/users');
+                const response = await axios.get('http://localhost:8081/users', {withCredentials: true});
                 if (response.status === 200) {
                     setUsers(response.data);
                 }
             } catch (error) {
                 console.error("Error fetching users:", error);
+                // SECURITY: If user gets access denied, they shouldn't be here
+                // The ProtectedRoute should have caught this, but as a fallback:
+                if (error.response && (error.response.status === 403 || error.response.status === 401)) {
+                    alert('🛡️ SECURITY: Access Denied. Admin privileges required.');
+                    navigate('/login');
+                }
             }
         };
         fetchUsers();
-    }, []);
+    }, [navigate]);
 
     const logout = async () => {
         try {

@@ -1,5 +1,6 @@
 import express from 'express';
 import mysql from 'mysql';
+import helmet from 'helmet';
 import cors from 'cors';
 import bcrypt from 'bcrypt';//hash password
 import multer from 'multer'//handle multiple form content
@@ -70,6 +71,14 @@ import {
 } from './security/securityLogging.js';
 
 const app = express();
+
+app.use(helmet());
+
+// Specifically set headers
+app.use(helmet.noSniff());                // X-Content-Type-Options: nosniff
+app.use(helmet.frameguard({ action: 'deny' })); // X-Frame-Options: DENY
+
+app.disable('x-powered-by'); 
 
 const isStrongPassword = (password) => {
     if (typeof password !== 'string') {
@@ -271,6 +280,35 @@ const verifyToken = (req, res, next) => {
     next();
   });
 };
+
+
+// Idle Timeout (sliding expiration)
+const ACCESS_EXPIRES_MS = 15 * 60 * 1000; // 15 minutes in milliseconds
+const ACCESS_EXPIRES_STR = '15m';         // jwt expiresIn string
+
+function generateAccessToken(payload) {
+  return jwt.sign(payload, process.env.LOGIN_KEY, { expiresIn: ACCESS_EXPIRES_STR });
+}
+
+// EXTEND TOKEN (sliding expiration)
+app.post('/auth/extend', verifyToken, (req, res) => {
+    const payload = {
+        id: req.user.id,
+        email: req.user.email,
+        userType: req.user.userType
+    };
+
+    const newToken = generateAccessToken(payload);
+
+    res.cookie('token', newToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'strict',
+        maxAge: ACCESS_EXPIRES_MS
+    });
+
+    res.json({ message: "Token extended" });
+});
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -528,6 +566,8 @@ app.post('/Login', [loginLimiter, accountLoginLimiter], async (req, res) => {
                 return res.status(423).json({ message: 'Account is locked. Please contact administrator.' });
             }
 
+            // session expiry logic
+            const SESSION_DURATION_MS = 15 * 60 * 1000; // 15 minutes 
             // SECURITY FIX: Create a JSON Web Token (JWT) for authenticated users
             // Use correct ID field based on userType (admin table uses 'admin_id', users table uses 'id')
             const token = jwt.sign(
@@ -535,10 +575,11 @@ app.post('/Login', [loginLimiter, accountLoginLimiter], async (req, res) => {
                     id: userType === 'Admin' ? user.admin_id : user.id, 
                     email: user.email || user.ic, 
                     userType: userType,
-                    loginTime: Date.now()
+                    loginTime: Date.now(),
+                    sessionExpiry: Date.now() + SESSION_DURATION_MS
                 },
                 process.env.LOGIN_KEY,
-                { expiresIn: '1h' }
+                { expiresIn: '15m' }
             );
 
             // SECURITY: Set the JWT as an HttpOnly cookie
@@ -548,7 +589,8 @@ app.post('/Login', [loginLimiter, accountLoginLimiter], async (req, res) => {
                 httpOnly: true,
                 secure: process.env.NODE_ENV === 'production',
                 sameSite: 'lax', // Changed from 'strict' to 'lax' for cross-origin compatibility
-                maxAge: 3600000
+                maxAge: SESSION_DURATION_MS // COOKIE EXPIRY ADDED
+
             });
 
             // SECURITY: Log successful login (A09 - Security Logging and Monitoring)
