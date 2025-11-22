@@ -239,7 +239,7 @@ function LoginPage() {
                                     <div className="input flex">
                                         <FaUserShield className='icon' />
                                         <input
-                                            type="email"
+                                            type="text"
                                             id="email"
                                             placeholder="Email"
                                             value={email}

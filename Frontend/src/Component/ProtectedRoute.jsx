@@ -7,7 +7,10 @@
  * SECURITY: OWASP A01 - Broken Access Control Prevention
  * - Verifies user authentication via JWT token
  * - Checks user role/type for admin-only routes
- * - Redirects unauthorized users to login page
+ * - Checks user role/type for user-only routes
+ * - Blocks admins from accessing user-only pages
+ * - Blocks users from accessing admin-only pages
+ * - Redirects unauthorized users to appropriate pages
  * 
  * Author: Security Implementation
  * Date: 2025-11-15
@@ -56,18 +59,23 @@ function ProtectedRoute({ children, requiredRole = null }) {
                         setRedirectTo('/login');
                     }
                 } else if (requiredRole === 'users') {
-                    // For user routes, verify token by checking any authenticated endpoint
-                    const response = await axios.post(
-                        'http://localhost:8081/auth/extend',
-                        {},
+                    // For user routes, verify token and ensure user is not an admin
+                    // First, try to access admin endpoint to check if user is admin
+                    const adminCheckResponse = await axios.get(
+                        'http://localhost:8081/users',
                         { 
                             withCredentials: true,
                             validateStatus: (status) => status < 500
                         }
                     );
 
-                    if (response.status === 200) {
-                        // User is authenticated
+                    if (adminCheckResponse.status === 200) {
+                        // User is authenticated and is an admin - block access to user routes
+                        console.warn('[SECURITY] Admin user attempted to access user-only route');
+                        setIsAuthorized(false);
+                        setRedirectTo('/adminhomepage'); // Redirect to admin homepage
+                    } else if (adminCheckResponse.status === 403) {
+                        // User is authenticated but not admin - this is what we want for user routes
                         setIsAuthorized(true);
                     } else {
                         // Not authenticated
@@ -126,6 +134,9 @@ function ProtectedRoute({ children, requiredRole = null }) {
         if (redirectTo === '/homepage') {
             // User is authenticated but doesn't have admin privileges
             alert(`🛡️ SECURITY: Access Denied\n\nYou do not have permission to access this page.\nAdmin privileges required.\n\nRedirecting to user homepage...`);
+        } else if (redirectTo === '/adminhomepage') {
+            // Admin is authenticated but trying to access user-only pages
+            alert(`🛡️ SECURITY: Access Denied\n\nYou do not have permission to access this page.\nThis page is for regular users only.\n\nRedirecting to admin homepage...`);
         }
         return <Navigate to={redirectTo} replace />;
     }
