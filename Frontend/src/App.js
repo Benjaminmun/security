@@ -7,6 +7,11 @@ import Camera from './Component/Camera/Camera';
 import AdminHomepage from './Component/adminhomepage/adminhompage';
 import ManageUsers from './Component/adminhomepage/manageuser';
 import CompletePage from './Component/Camera/CompletePage';
+<<<<<<< Updated upstream
+=======
+import ProtectedRoute from './Component/ProtectedRoute';
+import SecuritySettings from './Component/settings/SecuritySettings';
+>>>>>>> Stashed changes
 import { startActivityWatcher, setIdleWarningCallback } from "./utils/activityWatcher";
 import { useEffect, useState } from "react";
 
@@ -41,7 +46,19 @@ const router = createBrowserRouter([
     },
     {
         path: '/CompletePage',
+<<<<<<< Updated upstream
         element: <div><CompletePage /></div>
+=======
+        element: (
+            <ProtectedRoute requiredRole="users">
+                <div><CompletePage /></div>
+            </ProtectedRoute>
+        )
+    },
+    {
+        path: '/security-settings',
+        element: <div><SecuritySettings /></div>
+>>>>>>> Stashed changes
     }
 ]);
 

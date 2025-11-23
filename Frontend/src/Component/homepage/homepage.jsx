@@ -248,6 +248,7 @@ function Homepage() {
 
             {/* start from here */}
             <button className={styles.main_btn}><Link to="/camera">Take Picture</Link></button>
+            <button className={styles.main_btn}><Link to="/security-settings">Security Settings</Link></button>
             <button className={styles.main_btn} onClick={logout}>Logout</button>
            </div>
     </div>
