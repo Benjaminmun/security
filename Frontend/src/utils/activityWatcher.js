@@ -44,7 +44,7 @@ function resetIdleTimer() {
   }, IDLE_TIMEOUT_MS - 60000);
 }
 
-export function startActivityWatcher() {
+export const startActivityWatcher =() => {
   const events = ['mousemove', 'mousedown', 'click', 'scroll', 'keydown', 'touchstart'];
   events.forEach(ev => window.addEventListener(ev, resetIdleTimer, { passive: true }));
   // start the timer immediately

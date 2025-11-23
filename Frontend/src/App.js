@@ -76,8 +76,6 @@ function App() {
     const [idleMessage, setIdleMessage] = useState("");
 
     useEffect(() => {
-        startActivityWatcher();
-
         setIdleWarningCallback((msg) => {
             setIdleMessage(msg);
         });

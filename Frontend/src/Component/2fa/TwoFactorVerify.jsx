@@ -1,14 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import './TwoFactorVerify.css';
+import { startActivityWatcher } from "../../utils/activityWatcher"; 
 
-const TwoFactorVerify = ({ userId, userType, onCancel }) => {
+const TwoFactorVerify = ({ userId, userType, temp2FAToken, onCancel }) => {
     const [verificationCode, setVerificationCode] = useState('');
     const [useBackupCode, setUseBackupCode] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
+
+    useEffect(() => {
+        if (!temp2FAToken) {
+            setError("Temporary 2FA token missing. Please login again.");
+        }
+    }, [temp2FAToken]);
 
     const handleVerify = async (e) => {
         e.preventDefault();
@@ -16,23 +23,29 @@ const TwoFactorVerify = ({ userId, userType, onCancel }) => {
         setError('');
 
         try {
+            // Send temp2FAToken along with userId, userType, code, and backup flag
             const response = await axios.post(
                 'http://localhost:8081/2fa/verify-login',
                 {
                     userId,
                     userType,
                     token: verificationCode,
-                    isBackupCode: useBackupCode
+                    isBackupCode: useBackupCode,
+                    twoFactorToken: temp2FAToken
                 },
                 { withCredentials: true }
             );
 
-            // Successful 2FA verification - redirect to appropriate page
+            // Start session activity watcher
+            startActivityWatcher();
+
+            // Redirect based on user type
             if (userType === 'Admin') {
                 navigate('/adminhomepage');
             } else {
                 navigate('/homepage');
             }
+
         } catch (err) {
             setError(err.response?.data?.message || 'Verification failed. Please try again.');
         } finally {

@@ -217,9 +217,6 @@ const strictLimiter = rateLimit({
 // Use cookie-parser middleware
 app.use(cookieParser());
 
-// Load environment variables
-dotenv.config();
-
 // Security headers middleware
 app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -561,19 +558,30 @@ app.post('/Login', [loginLimiter, accountLoginLimiter], async (req, res) => {
                 return res.status(401).json({ message: 'Invalid credentials' });
             }
 
-            if (user.two_fa_enabled === 1) {
-                return res.json({
-                    message: '2FA verification required',
-                    requiresTwoFactor: true,
-                    userId: user.id,
+            const twoFactorToken = jwt.sign(
+                {
+                    id: user.id,
                     userType: userType,
-                    user: {
-                        id: user.id,
-                        email: user.email || user.ic,
-                        name: user.name
-                    }
-                });
-            }
+                    timestamp: Date.now()
+                },
+                process.env.TWOFA_KEY, // Use a separate secret key for 2FA
+                { expiresIn: '10m' } // temporary token valid for 10 minutes
+            );
+
+            if (user.two_fa_enabled === 1) {
+                return res.status(200).json({
+                        message: '2FA verification required',
+                        requiresTwoFactor: true,
+                        userId: user.id,
+                        userType: userType,
+                        twoFactorToken, // <-- added
+                        user: {
+                            id: user.id,
+                            email: user.email || user.ic,
+                            name: user.name
+                        }
+                    });
+                }
 
             // Check if account is locked in database
             if (user.is_locked) {
@@ -1469,41 +1477,83 @@ app.post('/2fa/verify-setup', verifyToken, async (req, res) => {
 });
 
 // 3. Verify 2FA Token During Login
-app.post('/2fa/verify-login', verifyToken, async (req, res) => {
+app.post('/2fa/verify-login', async (req, res) => {
     try {
         const { userId, userType, token, isBackupCode } = req.body;
-        if (!userId || !userType || !token) return res.status(400).json({ message: 'User ID, user type, and token are required.' });
+
+        if (!userId || !userType || !token) {
+            return res.status(400).json({ message: 'User ID, user type, and token are required.' });
+        }
 
         const { table, idColumn } = getTableAndIdColumn(userType);
         const query = `SELECT * FROM ${table} WHERE ${idColumn} = ?`;
 
         db.query(query, [userId], async (err, results) => {
-            if (err || results.length === 0) return res.status(500).json({ message: 'Failed to retrieve user data.' });
+            if (err || results.length === 0) {
+                console.error('Failed to retrieve user for 2FA:', err);
+                return res.status(500).json({ message: 'Failed to retrieve user data.' });
+            }
 
             const user = results[0];
             let verified = false;
 
+            // Backup code verification
             if (isBackupCode) {
                 const backupCodes = JSON.parse(user.two_fa_backup_codes || '[]');
                 for (let i = 0; i < backupCodes.length; i++) {
                     if (await bcrypt.compare(token, backupCodes[i])) {
                         verified = true;
+                        // Remove used backup code
                         backupCodes.splice(i, 1);
                         const updateQuery = `UPDATE ${table} SET two_fa_backup_codes = ? WHERE ${idColumn} = ?`;
-                        db.query(updateQuery, [JSON.stringify(backupCodes), userId], err => { if (err) console.error(err); });
+                        db.query(updateQuery, [JSON.stringify(backupCodes), userId], err => {
+                            if (err) console.error('Error updating backup codes:', err);
+                        });
                         break;
                     }
                 }
             } else {
-                verified = speakeasy.totp.verify({ secret: user.two_fa_secret, encoding: 'base32', token, window: 2 });
+                // TOTP verification
+                verified = speakeasy.totp.verify({
+                    secret: user.two_fa_secret,
+                    encoding: 'base32',
+                    token,
+                    window: 2
+                });
             }
 
             if (!verified) return res.status(400).json({ message: 'Invalid verification code.' });
 
-            const jwtToken = jwt.sign({ id: user[userType.toLowerCase() === 'admin' ? 'admin_id' : 'id'], email: user.email || user.ic, userType }, process.env.LOGIN_KEY, { expiresIn: '1h' });
-            res.cookie('token', jwtToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 3600000 });
+            // Issue JWT for session
+            const jwtToken = jwt.sign(
+                {
+                    id: userType === 'Admin' ? user.admin_id : user.id,
+                    email: user.email || user.ic,
+                    userType
+                },
+                process.env.LOGIN_KEY,
+                { expiresIn: '1h' }
+            );
 
-            res.status(200).json({ message: 'Login successful', user: { id: user[userType.toLowerCase() === 'admin' ? 'admin_id' : 'id'], email: user.email || null, ic: user.ic || null, name: user.name, userType } });
+            // Set HttpOnly cookie
+            res.cookie('token', jwtToken, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production',
+                sameSite: 'lax', // frontend compatibility
+                maxAge: 3600000
+            });
+
+            // Respond with user info in JSON
+            res.status(200).json({
+                message: 'Login successful',
+                user: {
+                    id: userType === 'Admin' ? user.admin_id : user.id,
+                    email: user.email || null,
+                    ic: user.ic || null,
+                    name: user.name,
+                    userType
+                }
+            });
         });
     } catch (error) {
         console.error('Error in 2FA login verification:', error);

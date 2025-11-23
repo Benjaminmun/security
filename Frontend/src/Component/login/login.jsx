@@ -6,6 +6,8 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { startActivityWatcher } from "../../utils/activityWatcher"; 
 
+
+
 // 2FA component
 import TwoFactorVerify from '../2fa/TwoFactorVerify';
 // icons
@@ -14,6 +16,8 @@ import { FaUser, FaShieldAlt } from "react-icons/fa";
 import { BsFillShieldLockFill } from "react-icons/bs";
 import { AiFillEyeInvisible } from "react-icons/ai";
 import { MdVisibility } from "react-icons/md";
+
+
 
 function LoginPage() {
     const [email, setEmail] = useState('');
@@ -30,6 +34,7 @@ function LoginPage() {
     const [requires2FA, setRequires2FA] = useState(false);
     const [twoFactorUserId, setTwoFactorUserId] = useState(null);
     const [twoFactorUserType, setTwoFactorUserType] = useState('');
+    const [twoFactorToken, setTwoFactorToken] = useState(null);
 
 
     // Default admin credentials
@@ -102,6 +107,7 @@ function LoginPage() {
                     // Show 2FA verification modal
                     setTwoFactorUserId(response.data.userId);
                     setTwoFactorUserType(response.data.userType);
+                    setTwoFactorToken(response.data.twoFactorToken); // <- save token
                     setRequires2FA(true);
                 } else {
                     // No 2FA required - proceed with normal login
@@ -195,6 +201,7 @@ function LoginPage() {
                 <TwoFactorVerify
                     userId={twoFactorUserId}
                     userType={twoFactorUserType}
+                    twoFactorToken={twoFactorToken} // <- pass token
                     onCancel={handle2FACancel}
                 />
             )}
