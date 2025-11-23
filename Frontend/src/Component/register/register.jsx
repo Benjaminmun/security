@@ -221,7 +221,7 @@ function Register() {
                     setRegisterStatus('🛡️ SECURITY: ' + errorMessage);
                 }
             } else {
-                setRegisterStatus('Registration failed. Please try again.');
+                setRegisterStatus('Too many registration attempts. Please try again later.');
             }
             setIsLoading(false);
             return;
