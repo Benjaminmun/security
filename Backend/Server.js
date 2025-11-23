@@ -72,13 +72,17 @@ import {
 
 const app = express();
 
-// SECURITY: Disable x-powered-by header to prevent framework exposure
-// This must be called before any other middleware
+// Disable x-powered-by header before any other middleware
 app.disable('x-powered-by');
 
-// Configure helmet for security headers
-// Helmet automatically sets: X-Content-Type-Options, X-Frame-Options, and other security headers
-app.use(helmet()); 
+// Configure helmet with explicit settings to hide framework information
+app.use(helmet({
+    hidePoweredBy: true  // Explicitly hide x-powered-by header
+}));
+
+// Specifically set headers
+app.use(helmet.noSniff());                // X-Content-Type-Options: nosniff
+app.use(helmet.frameguard({ action: 'deny' })); // X-Frame-Options: DENY 
 
 const isStrongPassword = (password) => {
     if (typeof password !== 'string') {
@@ -215,11 +219,9 @@ dotenv.config();
 
 // Security headers middleware
 app.use((req, res, next) => {
-    // SECURITY: Explicitly remove X-Powered-By header to prevent framework exposure
-    // This provides an additional layer of defense-in-depth beyond app.disable('x-powered-by')
-    res.removeHeader('X-Powered-By');
-    
-    // SECURITY: Set HSTS header for production (Helmet sets this too, but we ensure it's always present)
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();
 });
