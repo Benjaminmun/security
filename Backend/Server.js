@@ -15,6 +15,9 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 dotenv.config();
 
+import speakeasy from 'speakeasy';
+import QRCode from 'qrcode';
+
 //login 
 import jwt from 'jsonwebtoken'; // import json web token
 
@@ -558,6 +561,20 @@ app.post('/Login', [loginLimiter, accountLoginLimiter], async (req, res) => {
                 return res.status(401).json({ message: 'Invalid credentials' });
             }
 
+            if (user.two_fa_enabled === 1) {
+                return res.json({
+                    message: '2FA verification required',
+                    requiresTwoFactor: true,
+                    userId: user.id,
+                    userType: userType,
+                    user: {
+                        id: user.id,
+                        email: user.email || user.ic,
+                        name: user.name
+                    }
+                });
+            }
+
             // Check if account is locked in database
             if (user.is_locked) {
                 console.warn(`Login attempt to locked account: ${identifier} from IP: ${clientIP}`);
@@ -618,6 +635,7 @@ app.post('/Login', [loginLimiter, accountLoginLimiter], async (req, res) => {
                 user: {
                     id: userType === 'Admin' ? user.admin_id : user.id,
                     email: user.email || user.ic,
+                    requiresTwoFactor: false,
                     userType: userType
                 }
             });
@@ -1367,6 +1385,175 @@ app.put('/users/:userId', [verifyToken, requireAdmin, apiLimiter], (req, res) =>
         }
     );
 });
+
+app.get('/auth/me', verifyToken, (req, res) => {
+    res.status(200).json({
+        id: req.user.id,
+        userType: req.user.userType
+    });
+});
+
+function getTableAndIdColumn(userType) {
+    if (userType.toLowerCase() === 'admin') {
+        return { table: 'admin', idColumn: 'admin_id' };
+    }
+    return { table: 'users', idColumn: 'id' };
+}
+
+///////////////////////////////////////////////////////////////////////////// 2FA ENDPOINTS /////////////////////////////////////////////////////////////
+// 1. Setup 2FA - Generate secret and QR code
+app.post('/2fa/setup', verifyToken, async (req, res) => {
+    try {
+        const { userId, userType } = req.body;
+        if (!userId || !userType) return res.status(400).json({ message: 'User ID and user type are required.' });
+
+        const secret = speakeasy.generateSecret({
+            name: `DBKL Project (${userType === 'Admin' ? 'Admin' : 'User'})`,
+            issuer: 'DBKL Project'
+        });
+        const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
+
+        const { table, idColumn } = getTableAndIdColumn(userType);
+        const query = `UPDATE ${table} SET two_fa_secret = ? WHERE ${idColumn} = ?`;
+
+        db.query(query, [secret.base32, userId], (err, result) => {
+            if (err) {
+                console.error('Error saving 2FA secret:', err);
+                return res.status(500).json({ message: 'Failed to setup 2FA.' });
+            }
+
+            res.status(200).json({
+                message: '2FA setup initiated. Please scan the QR code with your authenticator app.',
+                qrCode: qrCodeUrl,
+                manualEntryKey: secret.base32
+            });
+        });
+    } catch (error) {
+        console.error('Error in 2FA setup:', error);
+        res.status(500).json({ message: 'Internal server error during 2FA setup.' });
+    }
+});
+
+// 2. Verify and Enable 2FA
+app.post('/2fa/verify-setup', verifyToken, async (req, res) => {
+    try {
+        const { userId, userType, token } = req.body;
+        if (!userId || !userType || !token) return res.status(400).json({ message: 'User ID, user type, and token are required.' });
+
+        const { table, idColumn } = getTableAndIdColumn(userType);
+        const query = `SELECT two_fa_secret FROM ${table} WHERE ${idColumn} = ?`;
+
+        db.query(query, [userId], (err, results) => {
+            if (err || results.length === 0) return res.status(500).json({ message: 'Failed to retrieve 2FA secret.' });
+
+            const secret = results[0].two_fa_secret;
+            const verified = speakeasy.totp.verify({ secret, encoding: 'base32', token, window: 2 });
+            if (!verified) return res.status(400).json({ message: 'Invalid verification code. Please try again.' });
+
+            const backupCodes = Array.from({ length: 10 }, () => Math.random().toString(36).substring(2, 10).toUpperCase());
+            const hashedBackupCodes = backupCodes.map(code => bcrypt.hashSync(code, 10));
+
+            const updateQuery = `UPDATE ${table} SET two_fa_enabled = 1, two_fa_backup_codes = ? WHERE ${idColumn} = ?`;
+            db.query(updateQuery, [JSON.stringify(hashedBackupCodes), userId], (err, result) => {
+                if (err) {
+                    console.error('Error enabling 2FA:', err);
+                    return res.status(500).json({ message: 'Failed to enable 2FA.' });
+                }
+                res.status(200).json({ message: '2FA enabled successfully!', backupCodes });
+            });
+        });
+    } catch (error) {
+        console.error('Error in 2FA verification:', error);
+        res.status(500).json({ message: 'Internal server error during 2FA verification.' });
+    }
+});
+
+// 3. Verify 2FA Token During Login
+app.post('/2fa/verify-login', verifyToken, async (req, res) => {
+    try {
+        const { userId, userType, token, isBackupCode } = req.body;
+        if (!userId || !userType || !token) return res.status(400).json({ message: 'User ID, user type, and token are required.' });
+
+        const { table, idColumn } = getTableAndIdColumn(userType);
+        const query = `SELECT * FROM ${table} WHERE ${idColumn} = ?`;
+
+        db.query(query, [userId], async (err, results) => {
+            if (err || results.length === 0) return res.status(500).json({ message: 'Failed to retrieve user data.' });
+
+            const user = results[0];
+            let verified = false;
+
+            if (isBackupCode) {
+                const backupCodes = JSON.parse(user.two_fa_backup_codes || '[]');
+                for (let i = 0; i < backupCodes.length; i++) {
+                    if (await bcrypt.compare(token, backupCodes[i])) {
+                        verified = true;
+                        backupCodes.splice(i, 1);
+                        const updateQuery = `UPDATE ${table} SET two_fa_backup_codes = ? WHERE ${idColumn} = ?`;
+                        db.query(updateQuery, [JSON.stringify(backupCodes), userId], err => { if (err) console.error(err); });
+                        break;
+                    }
+                }
+            } else {
+                verified = speakeasy.totp.verify({ secret: user.two_fa_secret, encoding: 'base32', token, window: 2 });
+            }
+
+            if (!verified) return res.status(400).json({ message: 'Invalid verification code.' });
+
+            const jwtToken = jwt.sign({ id: user[userType.toLowerCase() === 'admin' ? 'admin_id' : 'id'], email: user.email || user.ic, userType }, process.env.LOGIN_KEY, { expiresIn: '1h' });
+            res.cookie('token', jwtToken, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', maxAge: 3600000 });
+
+            res.status(200).json({ message: 'Login successful', user: { id: user[userType.toLowerCase() === 'admin' ? 'admin_id' : 'id'], email: user.email || null, ic: user.ic || null, name: user.name, userType } });
+        });
+    } catch (error) {
+        console.error('Error in 2FA login verification:', error);
+        res.status(500).json({ message: 'Internal server error during 2FA verification.' });
+    }
+});
+
+// 4. Disable 2FA
+app.post('/2fa/disable', verifyToken, async (req, res) => {
+    try {
+        const { userId, userType, token } = req.body;
+        if (!userId || !userType || !token) return res.status(400).json({ message: 'User ID, user type, and TOTP code are required.' });
+
+        const { table, idColumn } = getTableAndIdColumn(userType);
+        const query = `SELECT * FROM ${table} WHERE ${idColumn} = ?`;
+
+        db.query(query, [userId], async (err, results) => {
+            if (err || results.length === 0) return res.status(500).json({ message: 'Failed to retrieve user data.' });
+
+            const user = results[0];
+            const verified = speakeasy.totp.verify({ secret: user.two_fa_secret, encoding: 'base32', token, window: 2 });
+            if (!verified) return res.status(401).json({ message: 'Invalid verification code.' });
+
+            const updateQuery = `UPDATE ${table} SET two_fa_enabled = 0, two_fa_secret = NULL, two_fa_backup_codes = NULL WHERE ${idColumn} = ?`;
+            db.query(updateQuery, [userId], (err, result) => {
+                if (err) return res.status(500).json({ message: 'Failed to disable 2FA.' });
+                res.status(200).json({ message: '2FA disabled successfully.' });
+            });
+        });
+    } catch (error) {
+        console.error('Error disabling 2FA:', error);
+        res.status(500).json({ message: 'Internal server error while disabling 2FA.' });
+    }
+});
+
+// 5. Check 2FA Status
+app.get('/2fa/status/:userId/:userType', verifyToken, (req, res) => {
+    const { userId, userType } = req.params;
+    const { table, idColumn } = getTableAndIdColumn(userType);
+
+    const query = `SELECT two_fa_enabled FROM ${table} WHERE ${idColumn} = ?`;
+    db.query(query, [userId], (err, results) => {
+        if (err) return res.status(500).json({ message: 'Database error while retrieving 2FA status.' });
+        if (results.length === 0) return res.status(404).json({ message: 'No 2FA record found.' });
+
+        res.status(200).json({ twoFactorEnabled: results[0].two_fa_enabled === 1 });
+    });
+});
+
+
 
 // Start the server
 const PORT = 8081;

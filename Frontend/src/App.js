@@ -8,6 +8,8 @@ import AdminHomepage from './Component/adminhomepage/adminhompage';
 import ManageUsers from './Component/adminhomepage/manageuser';
 import CompletePage from './Component/Camera/CompletePage';
 import ProtectedRoute from './Component/ProtectedRoute';
+import SecuritySettings from './Component/settings/SecuritySettings';
+
 import { startActivityWatcher, setIdleWarningCallback } from "./utils/activityWatcher";
 import { useEffect, useState } from "react";
 
@@ -63,6 +65,10 @@ const router = createBrowserRouter([
                 <div><CompletePage /></div>
             </ProtectedRoute>
         )
+    },
+    {
+        path: '/security-settings',
+        element: <div><SecuritySettings /></div>
     }
 ]);
 

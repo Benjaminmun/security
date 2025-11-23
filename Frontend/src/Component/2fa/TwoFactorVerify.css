@@ -1,0 +1,224 @@
+two-factor-verify-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    animation: fadeIn 0.3s ease-in;
+}
+
+.two-factor-verify-modal {
+    background: white;
+    border-radius: 16px;
+    padding: 0;
+    max-width: 450px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    animation: slideUp 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(30px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.verify-header {
+    padding: 30px 30px 20px;
+    text-align: center;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.verify-header h2 {
+    margin: 0;
+    color: #333;
+    font-size: 24px;
+    font-weight: 600;
+}
+
+.verify-body {
+    padding: 30px;
+}
+
+.verify-instruction {
+    text-align: center;
+    color: #666;
+    font-size: 16px;
+    margin-bottom: 25px;
+    line-height: 1.5;
+}
+
+.verify-input {
+    width: 100%;
+    padding: 18px;
+    font-size: 28px;
+    text-align: center;
+    letter-spacing: 10px;
+    border: 3px solid #ddd;
+    border-radius: 10px;
+    margin-bottom: 20px;
+    font-family: 'Courier New', monospace;
+    transition: border-color 0.3s;
+    box-sizing: border-box;
+}
+
+.verify-input:focus {
+    outline: none;
+    border-color: #4CAF50;
+    box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
+}
+
+.verify-submit-btn {
+    width: 100%;
+    padding: 16px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
+.verify-submit-btn:hover:not(:disabled) {
+    background: #45a049;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 16px rgba(76, 175, 80, 0.4);
+}
+
+.verify-submit-btn:active:not(:disabled) {
+    transform: translateY(0);
+}
+
+.verify-submit-btn:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+.verify-options {
+    margin-top: 25px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.toggle-backup-btn {
+    width: 100%;
+    padding: 12px;
+    background: white;
+    color: #2196F3;
+    border: 2px solid #2196F3;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.toggle-backup-btn:hover {
+    background: #2196F3;
+    color: white;
+}
+
+.cancel-btn {
+    width: 100%;
+    padding: 12px;
+    background: white;
+    color: #666;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.cancel-btn:hover {
+    background: #f5f5f5;
+    border-color: #999;
+    color: #333;
+}
+
+.verify-help {
+    margin-top: 30px;
+    padding-top: 20px;
+    border-top: 1px solid #e0e0e0;
+    text-align: center;
+}
+
+.verify-help p {
+    margin: 5px 0;
+    color: #888;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.error-message {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 14px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    border-left: 4px solid #f5c6cb;
+    font-size: 14px;
+    animation: shake 0.4s ease-in-out;
+}
+
+@keyframes shake {
+    0%, 100% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-10px);
+    }
+    75% {
+        transform: translateX(10px);
+    }
+}
+
+/* Mobile responsive */
+@media (max-width: 600px) {
+    .two-factor-verify-modal {
+        width: 95%;
+    }
+
+    .verify-header {
+        padding: 25px 20px 15px;
+    }
+
+    .verify-header h2 {
+        font-size: 20px;
+    }
+
+    .verify-body {
+        padding: 25px 20px;
+    }
+
+    .verify-input {
+        font-size: 24px;
+        letter-spacing: 8px;
+        padding: 15px;
+    }
+}

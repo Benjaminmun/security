@@ -104,6 +104,7 @@ function AdminHomepage() {
                         <Link to="/manageuser" className={styles.actionButton}>Manage Users</Link>
                         <Link to="/view-reports" className={styles.actionButton}>View Reports</Link>
                         <Link to="/settings" className={styles.actionButton}>Settings</Link>
+                        <Link to="/security-settings" className={styles.actionButton}>Security Settings</Link>
                         <button onClick={logout} className={`${styles.button} ${styles.logoutButton}`}>Logout</button>
                     </div>
                 </section>
