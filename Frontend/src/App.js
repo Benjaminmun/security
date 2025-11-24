@@ -68,7 +68,11 @@ const router = createBrowserRouter([
     },
     {
         path: '/security-settings',
-        element: <div><SecuritySettings /></div>
+        element: (
+            <ProtectedRoute>
+                <div><SecuritySettings /></div>
+            </ProtectedRoute>
+        )
     }
 ]);
 

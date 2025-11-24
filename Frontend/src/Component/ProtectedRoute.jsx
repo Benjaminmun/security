@@ -59,27 +59,47 @@ function ProtectedRoute({ children, requiredRole = null }) {
                         setRedirectTo('/login');
                     }
                 } else if (requiredRole === 'users') {
-                    // For user routes, verify token and ensure user is not an admin
-                    // First, try to access admin endpoint to check if user is admin
-                    const adminCheckResponse = await axios.get(
-                        'http://localhost:8081/users',
+                    // For user routes, first verify authentication, then check role
+                    // Step 1: Check if user is authenticated
+                    const authCheckResponse = await axios.get(
+                        'http://localhost:8081/auth/me',
                         { 
                             withCredentials: true,
                             validateStatus: (status) => status < 500
                         }
                     );
 
-                    if (adminCheckResponse.status === 200) {
-                        // User is authenticated and is an admin - block access to user routes
-                        console.warn('[SECURITY] Admin user attempted to access user-only route');
-                        setIsAuthorized(false);
-                        setRedirectTo('/adminhomepage'); // Redirect to admin homepage
-                    } else if (adminCheckResponse.status === 403) {
-                        // User is authenticated but not admin - this is what we want for user routes
-                        setIsAuthorized(true);
-                    } else {
+                    if (authCheckResponse.status === 403 || authCheckResponse.status === 401) {
                         // Not authenticated
                         console.warn('[SECURITY] Unauthenticated access attempt to user route');
+                        setIsAuthorized(false);
+                        setRedirectTo('/login');
+                    } else if (authCheckResponse.status === 200) {
+                        // User is authenticated, now check if they're an admin
+                        const userType = authCheckResponse.data?.userType;
+                        
+                        if (!userType) {
+                            // Missing userType in response
+                            console.error('[SECURITY] Missing userType in authentication response');
+                            setIsAuthorized(false);
+                            setRedirectTo('/login');
+                        } else if (userType === 'Admin') {
+                            // Admin trying to access user-only route
+                            console.warn('[SECURITY] Admin user attempted to access user-only route');
+                            setIsAuthorized(false);
+                            setRedirectTo('/adminhomepage');
+                        } else if (userType === 'users') {
+                            // Regular user - allow access
+                            setIsAuthorized(true);
+                        } else {
+                            // Unexpected userType value
+                            console.error('[SECURITY] Unexpected userType value:', userType);
+                            setIsAuthorized(false);
+                            setRedirectTo('/login');
+                        }
+                    } else {
+                        // Unexpected status, treat as unauthenticated
+                        console.warn('[SECURITY] Unexpected authentication response');
                         setIsAuthorized(false);
                         setRedirectTo('/login');
                     }
@@ -133,10 +153,13 @@ function ProtectedRoute({ children, requiredRole = null }) {
     if (!isAuthorized) {
         if (redirectTo === '/homepage') {
             // User is authenticated but doesn't have admin privileges
-            alert(`🛡️ SECURITY: Access Denied\n\nYou do not have permission to access this page.\nAdmin privileges required.\n\nRedirecting to user homepage...`);
+            alert('🛡️ Access Denied\n\nYou do not have permission to access this page.\nAdmin privileges required.\n\nRedirecting to user homepage...');
         } else if (redirectTo === '/adminhomepage') {
             // Admin is authenticated but trying to access user-only pages
-            alert(`🛡️ SECURITY: Access Denied\n\nYou do not have permission to access this page.\nThis page is for regular users only.\n\nRedirecting to admin homepage...`);
+            alert('🛡️ Access Denied\n\nYou do not have permission to access this page.\nThis page is for regular users only.\n\nRedirecting to admin homepage...');
+        } else if (redirectTo === '/login') {
+            // User is not authenticated
+            alert('🛡️ Access Denied\n\nYou must be logged in to access this page.\n\nRedirecting to login...');
         }
         return <Navigate to={redirectTo} replace />;
     }

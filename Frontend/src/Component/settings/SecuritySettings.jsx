@@ -14,22 +14,26 @@ function SecuritySettings() {
         // Fetch user information
         const fetchUserInfo = async () => {
             try {
-                // NEW: Fetch logged-in user from JWT token
-                const res = await axios.get("http://localhost:8081/auth/me", {
+                // Use the /me endpoint to get authenticated user info
+                const response = await axios.get('http://localhost:8081/auth/me', {
                     withCredentials: true,
                 });
 
-                setUserId(res.data.id);          // real ID from backend
-                setUserType(res.data.userType);  // "Admin" or "users"
+                if (response.status === 200 && response.data.id) {
+                    setUserId(response.data.id);
+                    setUserType(response.data.userType);
+                }
             } catch (error) {
-                console.error("Failed to identify logged-in user", error);
+                console.error('Failed to fetch user information:', error);
+                // Redirect to login if not authenticated
+                navigate('/login');
             } finally {
                 setLoading(false);
             }
         };
 
         fetchUserInfo();
-    }, []);
+    }, [navigate]);
 
     const handleBack = () => {
         if (userType === 'Admin') {

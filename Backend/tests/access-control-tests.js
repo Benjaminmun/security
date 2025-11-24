@@ -249,6 +249,86 @@ class AccessControlTests {
         }
     }
 
+    async testUnauthenticatedSecuritySettingsAccess() {
+        const testName = 'Block Unauthenticated Access to Security Settings';
+        
+        try {
+            // Try to access /auth/me endpoint without token (simulates security-settings route protection)
+            const response = await axios.get(`${BASE_URL}/auth/me`, {
+                validateStatus: () => true
+            });
+
+            if (response.status === 403 || response.status === 401) {
+                printResult(testName, true, 'Unauthenticated access to security settings correctly blocked');
+                this.passedTests++;
+            } else {
+                printResult(testName, false, `Got status ${response.status}, expected 401/403`);
+                this.failedTests++;
+            }
+        } catch (error) {
+            printResult(testName, true, 'Access blocked');
+            this.passedTests++;
+        }
+    }
+
+    async testAuthenticatedUserSecuritySettingsAccess() {
+        const testName = 'Allow Authenticated User to Access Security Settings';
+        
+        if (!this.userToken) {
+            printResult(testName, false, 'User token not available');
+            this.failedTests++;
+            return;
+        }
+
+        try {
+            // Try to access /auth/me endpoint with user token (simulates security-settings route protection)
+            const response = await axios.get(`${BASE_URL}/auth/me`, {
+                headers: { Cookie: this.userToken },
+                validateStatus: () => true
+            });
+
+            if (response.status === 200) {
+                printResult(testName, true, 'Authenticated user successfully accessed security settings endpoint');
+                this.passedTests++;
+            } else {
+                printResult(testName, false, `Authenticated user denied access. Status: ${response.status}`);
+                this.failedTests++;
+            }
+        } catch (error) {
+            printResult(testName, false, `Error: ${error.message}`);
+            this.failedTests++;
+        }
+    }
+
+    async testAuthenticatedAdminSecuritySettingsAccess() {
+        const testName = 'Allow Authenticated Admin to Access Security Settings';
+        
+        if (!this.adminToken) {
+            printResult(testName, false, 'Admin token not available');
+            this.failedTests++;
+            return;
+        }
+
+        try {
+            // Try to access /auth/me endpoint with admin token (simulates security-settings route protection)
+            const response = await axios.get(`${BASE_URL}/auth/me`, {
+                headers: { Cookie: this.adminToken },
+                validateStatus: () => true
+            });
+
+            if (response.status === 200) {
+                printResult(testName, true, 'Authenticated admin successfully accessed security settings endpoint');
+                this.passedTests++;
+            } else {
+                printResult(testName, false, `Authenticated admin denied access. Status: ${response.status}`);
+                this.failedTests++;
+            }
+        } catch (error) {
+            printResult(testName, false, `Error: ${error.message}`);
+            this.failedTests++;
+        }
+    }
+
     printSummary() {
         const total = this.passedTests + this.failedTests;
         const percentage = total > 0 ? ((this.passedTests / total) * 100).toFixed(1) : 0;
@@ -278,6 +358,9 @@ class AccessControlTests {
             await this.testAdminAccessingAdminEndpoint();
             await this.testUserDeletionWithoutAdminRole();
             await this.testUserModificationByOtherUser();
+            await this.testUnauthenticatedSecuritySettingsAccess();
+            await this.testAuthenticatedUserSecuritySettingsAccess();
+            await this.testAuthenticatedAdminSecuritySettingsAccess();
         } catch (error) {
             console.error(`${colors.red}Test execution error: ${error.message}${colors.reset}`);
         }
