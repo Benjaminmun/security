@@ -19,6 +19,18 @@ import jwt from 'jsonwebtoken'; // import json web token
 
 const app = express();
 
+import rateLimit from "express-rate-limit";
+
+// Global rate limit — adjust as needed
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100,                 // limit each IP to 100 requests per 15 mins
+  standardHeaders: true,    // return rate limit info in headers
+  legacyHeaders: false
+});
+
+// Apply to all requests
+app.use(limiter);
 
 // Use cookie-parser middleware
 app.use(cookieParser());
@@ -29,10 +41,51 @@ dotenv.config();
 // Middleware
 app.use(bodyParser.json({ limit: '10mb' })); // Increase the limit to 10mb
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true })); // Increase the limit for URL-encoded data
+
+const allowedOrigins = ['http://localhost:3000']; 
+
 app.use(cors({
-    origin: 'http://localhost:3000',  // Change to the client URL if different
-    credentials: true                 // Allow cookies to be sent
+    origin: function (origin, callback) {
+        // Allow requests with no origin (like Postman, curl)
+        if (!origin) return callback(null, true);
+
+        if (allowedOrigins.indexOf(origin) === -1) {
+            // Respond with 403 Forbidden instead of throwing an error
+            return callback(new Error('CORS policy: This origin is not allowed'));
+        }
+
+        return callback(null, true);
+    },
+    methods: ['GET', 'POST', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    credentials: true,
+    maxAge: 600
 }));
+
+// Catch CORS errors and respond properly
+app.use((err, req, res, next) => {
+    if (err.message && err.message.includes('CORS policy')) {
+        return res.status(403).json({ error: err.message });
+    }
+    next(err);
+});
+
+// Enforce HTTPS 
+app.use((req, res, next) => {
+    if (process.env.NODE_ENV === 'production' && req.headers['x-forwarded-proto'] !== 'https') {
+        return res.redirect('https://' + req.headers.host + req.url);
+    }
+    next();
+});
+
+// Disable caching
+app.use((req, res, next) => {
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.set('Surrogate-Control', 'no-store');
+    next();
+});
 
 //////////////////////////////////////////////////////////////////////////////// MySQL connection////////////////////////////////////////////////////
 const db = mysql.createConnection({

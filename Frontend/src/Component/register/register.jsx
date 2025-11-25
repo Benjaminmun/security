@@ -159,6 +159,24 @@ function Register() {
                 
                 setRegisterStatus(`Too many registration attempts. Please try again in ${waitMinutes} minute(s).`);
                 startCountdown(retryAfter);
+            } else if (error.response && error.response.status === 400) {
+                // SECURITY: Input Validation - Show specific error messages
+                const errorMessage = error.response.data.message || 'Invalid input';
+                
+                // Check SQL injection FIRST before other validations
+                if (errorMessage.includes('SQL injection') ||
+                    errorMessage.includes('Invalid characters') || 
+                    errorMessage.includes('injection')) {
+                    setRegisterStatus('🛡️ SECURITY: Suspicious input detected and blocked. SQL injection attempt prevented.');
+                } else if (errorMessage.includes('IC')) {
+                    setRegisterStatus('🛡️ SECURITY: Invalid IC format. Please use YYMMDD-PB-###G format.');
+                } else if (errorMessage.includes('email')) {
+                    setRegisterStatus('🛡️ SECURITY: Invalid email format detected.');
+                } else if (errorMessage.includes('username')) {
+                    setRegisterStatus('🛡️ SECURITY: Invalid username. Use only letters, numbers, and underscores.');
+                } else {
+                    setRegisterStatus('🛡️ SECURITY: ' + errorMessage);
+                }
             } else {
                 setRegisterStatus('Error checking account existence: ' + (error.message || 'Unknown error'));
             }
@@ -184,8 +202,26 @@ function Register() {
                 
                 setRegisterStatus(`Too many registration attempts. Please try again in ${waitMinutes} minute(s).`);
                 startCountdown(retryAfter);
+            } else if (error.response && error.response.status === 400) {
+                // SECURITY: Input Validation - Show specific error messages
+                const errorMessage = error.response.data.message || 'Invalid input';
+                
+                // Check SQL injection FIRST before other validations
+                if (errorMessage.includes('SQL injection') ||
+                    errorMessage.includes('Invalid characters') || 
+                    errorMessage.includes('injection')) {
+                    setRegisterStatus('🛡️ SECURITY: Suspicious input detected and blocked. SQL injection attempt prevented.');
+                } else if (errorMessage.includes('Password')) {
+                    setRegisterStatus('🛡️ SECURITY: ' + errorMessage);
+                } else if (errorMessage.includes('IC')) {
+                    setRegisterStatus('🛡️ SECURITY: Invalid IC format. Please use YYMMDD-PB-###G format.');
+                } else if (errorMessage.includes('username')) {
+                    setRegisterStatus('🛡️ SECURITY: Invalid username. Use only letters, numbers, and underscores.');
+                } else {
+                    setRegisterStatus('🛡️ SECURITY: ' + errorMessage);
+                }
             } else {
-                setRegisterStatus('Registration failed. Please try again.');
+                setRegisterStatus('Too many registration attempts. Please try again later.');
             }
             setIsLoading(false);
             return;

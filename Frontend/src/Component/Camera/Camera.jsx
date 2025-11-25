@@ -1,8 +1,31 @@
+/**
+ * Camera Component - OpenStreetMap Implementation
+ * 
+ * SECURITY MIGRATION: Replaced Google Maps with OpenStreetMap
+ * - Browser geolocation API (replaces Google Geolocation)
+ * - Nominatim reverse geocoding (replaces Google Geocoding)
+ * - Leaflet library for map rendering (replaces Google Maps)
+ */
+
 import React, { useState, useRef, useEffect } from 'react';
-import { GoogleMap, LoadScript, Autocomplete, Marker } from '@react-google-maps/api';
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import './camera.css';
 import {useNavigate} from 'react-router-dom';
 
+// Fix Leaflet marker icons
+import icon from 'leaflet/dist/images/marker-icon.png';
+import iconShadow from 'leaflet/dist/images/marker-shadow.png';
+
+let DefaultIcon = L.icon({
+    iconUrl: icon,
+    shadowUrl: iconShadow,
+    iconSize: [25, 41],
+    iconAnchor: [12, 41]
+});
+
+L.Marker.prototype.options.icon = DefaultIcon;
 
 const Camera = () => {
     const [imageDataUrl, setImageDataUrl] = useState('');
@@ -10,10 +33,13 @@ const Camera = () => {
     const [location, setLocation] = useState({ latitude: null, longitude: null });
     const [selectedLocation, setSelectedLocation] = useState({ latitude: null, longitude: null });
     const [selectedAddress, setSelectedAddress] = useState(null);
-    const [autocomplete, setAutocomplete] = useState(null);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchResults, setSearchResults] = useState([]);
     const [warningMessage, setWarningMessage] = useState('');
     const [statusColor, setStatusColor] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [mapCenter, setMapCenter] = useState([3.1390, 101.6869]); // KL default
+    const [mapZoom, setMapZoom] = useState(12);
     const videoRef = useRef(null);
     const canvasRef = useRef(null);
     const navigate = useNavigate();
@@ -39,47 +65,49 @@ const Camera = () => {
         };
     }, []);
 
+    // SECURITY UPDATE: Browser Geolocation API (replaces Google Geolocation)
     const captureLocation = async () => {
-        try {
-            const response = await fetch('https://www.googleapis.com/geolocation/v1/geolocate?key=AIzaSyBuPum0hFde7ZQLB6arVJ0F2EQJfmPv0Rs', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ considerIp: true }),
-            });
-    
-            if (response.ok) {
-                const locationData = await response.json();
-                const { lat, lng } = locationData.location;
-                
-                setLocation({
-                    latitude: lat,
-                    longitude: lng,
-                });
-    
-                console.log('Location from Google API:', locationData.location);
-                return { latitude: lat, longitude: lng };
-            } else {
-                console.error('Failed to fetch location from Google API');
-                return null;
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                console.error('Geolocation not supported');
+                reject(new Error('Geolocation not supported'));
+                return;
             }
-        } catch (error) {
-            console.error('Error with Google Geolocation API:', error);
-            return null;
-        }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const locationData = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude
+                    };
+                    setLocation(locationData);
+                    console.log('Location from browser:', locationData);
+                    resolve(locationData);
+                },
+                (error) => {
+                    console.error('Error getting location:', error);
+                    const fallbackLocation = {
+                        latitude: mapCenter[0],
+                        longitude: mapCenter[1]
+                    };
+                    setLocation(fallbackLocation);
+                    resolve(fallbackLocation);
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        });
     };
     
     const saveLocationData = async (capturedLocation, selectedLocation, selectedAddress) => {
-        if (!capturedLocation || capturedLocation.latitude === null || capturedLocation.longitude === null) {
-            console.error('Captured location is null. Please ensure location is captured before saving.');
+        if (!capturedLocation || capturedLocation.latitude === null) {
+            console.error('Captured location is null');
             return;
         }
     
         try {
             const response = await fetch('http://localhost:8081/saveLocation', {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
                 body: JSON.stringify({
                     capturedLatitude: capturedLocation.latitude,
@@ -106,7 +134,7 @@ const Camera = () => {
             return;
         }
     
-        setWarningMessage(''); // Clear any existing warning messages
+        setWarningMessage('');
     
         const canvas = canvasRef.current;
         const video = videoRef.current;
@@ -124,9 +152,8 @@ const Camera = () => {
     
         const dataUrl = canvas.toDataURL('image/png');
         setImageDataUrl(dataUrl);
-        console.log('Captured Image Data URL:', dataUrl);
+        console.log('Captured Image');
     
-        // Capture and save location only
         const locationData = await captureLocation();
         if (locationData) {
             await saveLocationData(locationData, selectedLocation, selectedAddress);
@@ -142,7 +169,6 @@ const Camera = () => {
     
         try {
             const base64Image = imageDataUrl.split(',')[1];
-            console.log('Captured Image Base64 Length:', base64Image.length);
     
             const response = await fetch('http://localhost:8081/compareFaces', {
                 method: 'POST',
@@ -152,41 +178,21 @@ const Camera = () => {
             });
     
             const result = await response.json();
-            console.log('Comparison API full result:', result);
-    
             const matchResultMessage = result.message.trim();
-            console.log('Comparison result message:', matchResultMessage);
-    
             setComparisonResult(matchResultMessage);
     
-            // Determine if faces match
             const faceMatch = matchResultMessage === 'Faces match';
-            console.log("Face Match:", faceMatch); // Log faceMatch result
-    
-            // Determine if locations match
             const locationMatch = isLocationMatch(location, selectedLocation);
-            console.log("Location Match:", locationMatch); // Log locationMatch result
-            
-            // Determine status based on matches
             const status = determineStatus(locationMatch, faceMatch);
-            console.log("Determined Status:", status);
-
-            // Save status to the database
-            await saveStatusInDatabase(status);
-
-            // Determine reason based on matches
             const reason = determineReason(locationMatch, faceMatch);
-            console.log("Determined Reason:", reason);
 
-            // Save reason to the database
+            await saveStatusInDatabase(status);
             await saveReasonInDatabase(reason);
 
-            // Update UI status color
             if (status === 'GREEN') setStatusColor('green');
             else if (status === 'YELLOW') setStatusColor('yellow');
             else setStatusColor('red');
 
-            // Navigate to CompletePage
             navigate('/completepage');
         } catch (error) {
             console.error('Error comparing faces:', error);
@@ -194,15 +200,17 @@ const Camera = () => {
         }
     };
     
+    // SECURITY UPDATE: Nominatim reverse geocoding (replaces Google Geocoding)
     const fetchAddress = async (lat, lng) => {
         try {
-            const response = await fetch(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=AIzaSyBuPum0hFde7ZQLB6arVJ0F2EQJfmPv0Rs`);
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`,
+                { headers: { 'User-Agent': 'DBKL-Security-Project/1.0' } }
+            );
             const data = await response.json();
-            console.log("Geocoding API response:", data);
     
-            if (data.results && data.results[0]) {
-                const address = data.results[0].formatted_address;
-                setSelectedAddress(address);
+            if (data.display_name) {
+                setSelectedAddress(data.display_name);
             } else {
                 setSelectedAddress('Address not found');
             }
@@ -212,6 +220,35 @@ const Camera = () => {
         }
     };
     
+    // SECURITY UPDATE: Nominatim search (replaces Google Places)
+    const handleSearch = async (e) => {
+        e.preventDefault();
+        if (!searchQuery.trim()) return;
+
+        try {
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery)}&limit=5`,
+                { headers: { 'User-Agent': 'DBKL-Security-Project/1.0' } }
+            );
+            const results = await response.json();
+            setSearchResults(results);
+        } catch (error) {
+            console.error('Error searching location:', error);
+            setSearchResults([]);
+        }
+    };
+
+    const selectSearchResult = (result) => {
+        const lat = parseFloat(result.lat);
+        const lng = parseFloat(result.lon);
+        setSelectedLocation({ latitude: lat, longitude: lng });
+        setMapCenter([lat, lng]);
+        setMapZoom(15);
+        fetchAddress(lat, lng);
+        setSearchResults([]);
+        setSearchQuery('');
+        setWarningMessage('');
+    };
 
     const isLocationMatch = (location1, location2, margin = 0.01) => {
         return (
@@ -220,158 +257,124 @@ const Camera = () => {
         );
     };
 
-
     const determineStatus = (locationMatch, faceMatch) => {
-        if (locationMatch && faceMatch) {
-            return 'GREEN';
-        } else if (locationMatch) {
-            return 'YELLOW';
-        } else if (faceMatch) {
-            return 'YELLOW';
-        } else {
-            return 'RED';
-        }
+        if (locationMatch && faceMatch) return 'GREEN';
+        else if (locationMatch || faceMatch) return 'YELLOW';
+        else return 'RED';
     };
     
     const saveStatusInDatabase = async (status) => {
         try {
-            const response = await fetch('http://localhost:8081/saveStatus', {
+            await fetch('http://localhost:8081/saveStatus', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',  // Ensure the token is included in the request
+                credentials: 'include',
                 body: JSON.stringify({ status }),
             });
-    
-            const result = await response.json();
-            console.log(result.message);
         } catch (error) {
             console.error('Error saving status:', error);
         }
     };
     
-
     const determineReason = (locationMatch, faceMatch) => {
-        if (locationMatch && faceMatch) {
-            return 'Both location and face match';
-        } else if (locationMatch) {
-            return 'Faces do not match';
-        } else if (faceMatch) {
-            return 'Locations do not match';
-        } else {
-            return 'Both location and face do not match';
-        }
+        if (locationMatch && faceMatch) return 'Both location and face match';
+        else if (locationMatch) return 'Faces do not match';
+        else if (faceMatch) return 'Locations do not match';
+        else return 'Both location and face do not match';
     };
     
     const saveReasonInDatabase = async (reason) => {
         try {
-            const response = await fetch('http://localhost:8081/saveReason', {
+            await fetch('http://localhost:8081/saveReason', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',  // Ensure the token is included in the request
+                credentials: 'include',
                 body: JSON.stringify({ reason }),
             });
-    
-            const result = await response.json();
-            console.log(result.message);
         } catch (error) {
             console.error('Error saving reason:', error);
         }
     };
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-    const onLoad = (autocompleteInstance) => {
-        setAutocomplete(autocompleteInstance);
-    };
-
-    const onPlaceChanged = () => {
-        if (autocomplete) {
-            const place = autocomplete.getPlace();
-            if (place.geometry) {
-                const lat = place.geometry.location.lat();
-                const lng = place.geometry.location.lng();
-                setSelectedLocation({ latitude: lat, longitude: lng });
-                fetchAddress(lat, lng);
-    
-                saveLocationData();
+    // Map click handler component
+    function MapClickHandler() {
+        useMapEvents({
+            click(e) {
+                setSelectedLocation({ latitude: e.latlng.lat, longitude: e.latlng.lng });
+                fetchAddress(e.latlng.lat, e.latlng.lng);
+                setWarningMessage('');
             }
-        }
-    };
-    
-
-    const handleMapClick = (event) => {
-        const lat = event.latLng.lat();
-        const lng = event.latLng.lng();
-        setSelectedLocation({ latitude: lat, longitude: lng });
-        fetchAddress(lat, lng); // Fetch address for the selected location
-        setWarningMessage(''); // Clear any existing warning message
-    };
-
+        });
+        return null;
+    }
 
     return (
         <div className="camera-container">
-            
             <h2>Capture Image from Camera</h2>
     
             <div className="content-wrapper">
-                {/* Camera and Capture Button */}
                 <div className="camera-section">
                     <video ref={videoRef} autoPlay className="camera-video" />
-                    <div class="button-container">
-
-                    <button onClick={captureImage} className="camera-btn">Capture Image and Save Location</button>
-
-                    {warningMessage && (
-                    <div className="warning-message" style={{ textAlign: 'center', marginTop: '20px', color: 'red' }}>
-                        {warningMessage}
+                    <div className="button-container">
+                        <button onClick={captureImage} className="camera-btn">Capture Image and Save Location</button>
+                        {warningMessage && (
+                            <div className="warning-message" style={{ textAlign: 'center', marginTop: '20px', color: 'red' }}>
+                                {warningMessage}
+                            </div>
+                        )}
+                        <canvas ref={canvasRef} style={{ display: 'none' }} />
                     </div>
-                )}
-    
-                    <canvas ref={canvasRef} style={{ display: 'none' }} />
-
-                    </div>
-
                 </div>
     
-                {/* Google Maps with Search and Click Selection */}
+                {/* OpenStreetMap Section */}
                 <div className="map-section">
-                    <LoadScript googleMapsApiKey="AIzaSyBuPum0hFde7ZQLB6arVJ0F2EQJfmPv0Rs" libraries={['places']}>
-                        <GoogleMap
-                            center={selectedLocation.latitude && selectedLocation.longitude
-                                ? { lat: selectedLocation.latitude, lng: selectedLocation.longitude }
-                                : { lat: 0, lng: 0 }}
-                            zoom={selectedLocation.latitude ? 15 : 2}
-                            mapContainerStyle={{ width: '100%', height: '400px', position: 'relative' }}
-                            onClick={handleMapClick}
-                        >
-                            <div style={{ position: 'absolute', top: '10px', left: '10px', zIndex: '10', width: '80%' }}>
-                                <Autocomplete onLoad={onLoad} onPlaceChanged={onPlaceChanged}>
-                                    <input
-                                        type="text"
-                                        placeholder="Search location"
-                                        className="map-search-input"
-                                        style={{ width: '100%', padding: '8px', borderRadius: '4px' }}
-                                    />
-                                </Autocomplete>
+                    <div style={{ marginBottom: '10px' }}>
+                        <form onSubmit={handleSearch} style={{ display: 'flex', gap: '5px' }}>
+                            <input
+                                type="text"
+                                placeholder="Search location (e.g., Kuala Lumpur)"
+                                className="map-search-input"
+                                style={{ flex: 1, padding: '8px', borderRadius: '4px', border: '1px solid #ccc' }}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                            <button type="submit" style={{ padding: '8px 16px', borderRadius: '4px', border: 'none', background: '#007bff', color: 'white', cursor: 'pointer' }}>
+                                Search
+                            </button>
+                        </form>
+                        {searchResults.length > 0 && (
+                            <div style={{ background: 'white', border: '1px solid #ccc', borderRadius: '4px', marginTop: '5px', maxHeight: '200px', overflowY: 'auto' }}>
+                                {searchResults.map((result, index) => (
+                                    <div
+                                        key={index}
+                                        style={{ padding: '8px', cursor: 'pointer', borderBottom: '1px solid #eee' }}
+                                        onClick={() => selectSearchResult(result)}
+                                        onMouseEnter={(e) => e.target.style.background = '#f0f0f0'}
+                                        onMouseLeave={(e) => e.target.style.background = 'white'}
+                                    >
+                                        {result.display_name}
+                                    </div>
+                                ))}
                             </div>
-                            
-                            {selectedLocation.latitude && selectedLocation.longitude && (
-                                <Marker position={{ lat: selectedLocation.latitude, lng: selectedLocation.longitude }} />
-                            )}
-                        </GoogleMap>
-                    </LoadScript>
-                    {/* Display selected location coordinates */}
+                        )}
+                    </div>
+
+                    <MapContainer center={mapCenter} zoom={mapZoom} style={{ width: '100%', height: '400px' }}>
+                        <TileLayer
+                            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+                            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        />
+                        <MapClickHandler />
+                        {selectedLocation.latitude && selectedLocation.longitude && (
+                            <Marker position={[selectedLocation.latitude, selectedLocation.longitude]}>
+                                <Popup>
+                                    Selected Location<br />
+                                    {selectedAddress || 'Loading...'}
+                                </Popup>
+                            </Marker>
+                        )}
+                    </MapContainer>
+
                     {selectedLocation.latitude && selectedLocation.longitude && (
                         <div className="selected-location-info">
                             <h3>Selected Location:</h3>
@@ -379,13 +382,10 @@ const Camera = () => {
                             <p>Longitude: {selectedLocation.longitude}</p>
                             <p>Address: {selectedAddress || 'Loading...'}</p>
                         </div>
-            )}
+                    )}
                 </div>
-
             </div>
-
     
-            {/* Display captured image and location info */}
             {imageDataUrl && (
                 <div className="captured-image-container">
                     <h3>Captured Image:</h3>
@@ -400,41 +400,14 @@ const Camera = () => {
                     )}
     
                     <div className="compare-button-container">
-                        <button
-                            onClick={handleCompareFaces}
-                            className="camera-btn"
-                            disabled={isLoading}
-                        >
+                        <button onClick={handleCompareFaces} className="camera-btn" disabled={isLoading}>
                             {isLoading ? 'Loading...' : 'Confirm'}
                         </button>
                     </div>
                 </div>
             )}
-    
-            {/* Comparison Result
-            {comparisonResult && (
-                <div className="comparison-result">
-                    <h3>Comparison Result:</h3>
-                    <p>{comparisonResult}</p>
-                </div>
-            )} */}
-
-            {/* Status Indicator
-            <div className="status-display">
-                <h3>Status:</h3>
-                <div className={`status-indicator ${statusColor}`}>
-                    <p>{statusColor.toUpperCase()}</p>
-                    </div>
-            </div> */}
-
-            {/* <div style={{background: '#007bff', borderRadius: '10px',
-                 width: '170px', padding:'10px', position: 'fixed', bottom: '0', right:'0'
-                 , margin: '0 50px 30px 0px', cursor: 'pointer' }}>
-                <Link to="/homepage"><span style={{fontWeight: '600', color: '#fff'}}>Home</span></Link>
-            </div> */}
 
             {isLoading && <p>Loading...</p>}
-
         </div>
     );
 };
