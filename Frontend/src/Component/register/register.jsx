@@ -115,12 +115,32 @@ function Register() {
         return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
     };
 
+    // Enhanced error handler for rate limiting - FIXED VERSION
+    const handleRateLimitError = (error, operationType) => {
+        if (error.response && error.response.status === 429) {
+            const responseData = error.response.data;
+            // Use retryAfter from backend response, fallback to 3600 seconds (1 hour)
+            const retryAfter = responseData.retryAfter || 3600;
+            const waitMinutes = Math.ceil(retryAfter / 60);
+            
+            const message = operationType === 'check' 
+                ? `Too many account checks. Please try again in ${waitMinutes} minute(s).`
+                : `Too many registration attempts. Please try again in ${waitMinutes} minute(s).`;
+            
+            setRegisterStatus(message);
+            startCountdown(retryAfter); // ← THIS WAS MISSING - NOW ADDED!
+            return true; // Indicates rate limit was handled
+        }
+        return false;
+    };
+
     const handleSubmit = async (event) => {
         event.preventDefault();
         setIsLoading(true);
         setRegisterStatus('');
         setCountdown(null);
 
+        // Basic validations
         if (!arePasswordsMatching(password, confirmPassword)) {
             setRegisterStatus('Passwords do not match.');
             setIsLoading(false);
@@ -151,19 +171,16 @@ function Register() {
                 return;
             }
         } catch (error) {
-            // Handle rate limiting errors with precise timing
-            if (error.response && error.response.status === 429) {
-                const responseData = error.response.data;
-                const retryAfter = responseData.retryAfter || 3600; // Default to 1 hour
-                const waitMinutes = Math.ceil(retryAfter / 60);
-                
-                setRegisterStatus(`Too many registration attempts. Please try again in ${waitMinutes} minute(s).`);
-                startCountdown(retryAfter);
-            } else if (error.response && error.response.status === 400) {
-                // SECURITY: Input Validation - Show specific error messages
+            // Handle rate limiting for account check
+            if (handleRateLimitError(error, 'check')) {
+                setIsLoading(false);
+                return;
+            }
+            
+            // Handle other errors
+            if (error.response && error.response.status === 400) {
                 const errorMessage = error.response.data.message || 'Invalid input';
                 
-                // Check SQL injection FIRST before other validations
                 if (errorMessage.includes('SQL injection') ||
                     errorMessage.includes('Invalid characters') || 
                     errorMessage.includes('injection')) {
@@ -194,19 +211,16 @@ function Register() {
                 }, 2000);
             }
         } catch (error) {
-            // Handle rate limiting errors with precise timing
-            if (error.response && error.response.status === 429) {
-                const responseData = error.response.data;
-                const retryAfter = responseData.retryAfter || 3600; // Default to 1 hour
-                const waitMinutes = Math.ceil(retryAfter / 60);
-                
-                setRegisterStatus(`Too many registration attempts. Please try again in ${waitMinutes} minute(s).`);
-                startCountdown(retryAfter);
-            } else if (error.response && error.response.status === 400) {
-                // SECURITY: Input Validation - Show specific error messages
+            // Handle rate limiting for registration
+            if (handleRateLimitError(error, 'register')) {
+                setIsLoading(false);
+                return;
+            }
+            
+            // Handle other registration errors
+            if (error.response && error.response.status === 400) {
                 const errorMessage = error.response.data.message || 'Invalid input';
                 
-                // Check SQL injection FIRST before other validations
                 if (errorMessage.includes('SQL injection') ||
                     errorMessage.includes('Invalid characters') || 
                     errorMessage.includes('injection')) {
@@ -221,7 +235,7 @@ function Register() {
                     setRegisterStatus('🛡️ SECURITY: ' + errorMessage);
                 }
             } else {
-                setRegisterStatus('Too many registration attempts. Please try again later.');
+                setRegisterStatus('Registration failed: ' + (error.message || 'Unknown error'));
             }
             setIsLoading(false);
             return;

@@ -177,12 +177,15 @@ const registerLimiter = rateLimit({
     const waitTimeInSeconds = Math.round((resetTime - now) / 1000);
     const waitTimeInMinutes = Math.ceil(waitTimeInSeconds / 60);
 
+    console.warn(`Registration rate limit exceeded for IP: ${req.ip}, Wait time: ${waitTimeInSeconds}s`);
+
     res.setHeader('Retry-After', waitTimeInSeconds);
     
     res.status(429).json({
       error: "Too many accounts created from this IP",
       message: `Too many registration attempts. Please try again in ${waitTimeInMinutes} minute(s).`,
-      retryAfter: waitTimeInSeconds
+      retryAfter: waitTimeInSeconds,
+      resetTime: resetTime.toISOString()
     });
   }
 });
