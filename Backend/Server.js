@@ -15,18 +15,6 @@ import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 dotenv.config();
 
-const app = express();
-
-// Global rate limiter middleware
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 40,                 // limit each IP to 40 requests per 15 mins
-  standardHeaders: true,    // return rate limit info in headers
-  legacyHeaders: false
-});
-
-// Apply to all requests
-app.use(limiter);
 
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
@@ -86,7 +74,9 @@ import {
     EVENT_TYPES
 } from './security/securityLogging.js';
 
-// const app = express();
+const app = express();
+
+// import rateLimit from "express-rate-limit";
 
 app.use(helmet());
 
@@ -178,7 +168,6 @@ const registerLimiter = rateLimit({
     const waitTimeInMinutes = Math.ceil(waitTimeInSeconds / 60);
 
     console.warn(`Registration rate limit exceeded for IP: ${req.ip}, Wait time: ${waitTimeInSeconds}s`);
-
     res.setHeader('Retry-After', waitTimeInSeconds);
     
     res.status(429).json({
@@ -226,6 +215,17 @@ const strictLimiter = rateLimit({
   }
 });
 
+// Global rate limiter middleware
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 400,                 // limit each IP to 40 requests per 15 mins
+  standardHeaders: true,    // return rate limit info in headers
+  legacyHeaders: false
+});
+
+// Apply to all requests
+app.use(limiter);
+
 // Use cookie-parser middleware
 app.use(cookieParser());
 
@@ -263,6 +263,12 @@ app.use((req, res, next) => {
 // Middleware
 app.use(bodyParser.json({ limit: '10mb' }));
 app.use(bodyParser.urlencoded({ limit: '10mb', extended: true }));
+
+// app.use(cors({
+//     origin: 'http://localhost:3000',
+//     credentials: true
+// }));
+
 const allowedOrigins = ['http://localhost:3000']; 
 
 app.use(cors({
@@ -290,6 +296,7 @@ app.use((err, req, res, next) => {
     }
     next(err);
 });
+
 // Enforce HTTPS 
 app.use((req, res, next) => {
     if (process.env.NODE_ENV === 'production' && req.headers['x-forwarded-proto'] !== 'https') {
